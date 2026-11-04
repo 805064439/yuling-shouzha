@@ -286,7 +286,64 @@ export function shadeHex(hex: string, t: number): string {
 // 面板：双面层入口
 //   surface 'ink'   = 墨面（深，默认，兼容旧行为：旧行为就是深面板）
 //   surface 'paper' = 纸面（宣纸卡片/弹窗/立绘舞台）
+//   标准色面板优先用九宫格切图（resources/ui/ui_panel_*.png，SLICED），
+//   自定义 bg 色仍走 Graphics 圆角矩形兜底。
 // ─────────────────────────────────────────────────────────────
+const SPRITE_TYPE_SLICED = 1; // Sprite.SpriteType.SLICED（web-mobile 构建不导出该枚举，用数值）
+
+// 九宫格面板切图加载（1x 图：ink/paper 120×120 border 16pt；deep 96×96 border 14pt）
+// 注意：本项目 PNG 按 texture 类型导入（无 spriteFrame 子资源，与立绘同坑），
+// 因此加载 Texture2D 后运行时包成 SpriteFrame 并设置 insetBorder。
+const panelSfCache: Record<string, SpriteFrame> = {};
+export function loadUiFrame(name: string): Promise<SpriteFrame | null> {
+    if (panelSfCache[name]) return Promise.resolve(panelSfCache[name]);
+    const border = name === 'ui_panel_deep' ? 14 : 16;
+    const toFrame = (tex: Texture2D | null): SpriteFrame | null => {
+        if (!tex) return null;
+        const frame = new SpriteFrame();
+        frame.texture = tex;
+        frame.rect = new Rect(0, 0, tex.width, tex.height);
+        frame.originalSize = new Size(tex.width, tex.height);
+        frame.insetBorder = new Rect(border, border, border, border);
+        return frame;
+    };
+    return new Promise((resolve) => {
+        resources.load(`ui/${name}/texture`, Texture2D, (err: any, tex: Texture2D) => {
+            const frame = toFrame(err || !tex ? null : tex);
+            if (frame) panelSfCache[name] = frame;
+            resolve(frame);
+        });
+    });
+}
+
+// 预载三张面板切图（GameManager.start 调用；否则首个面板会先走 Graphics 再换切图）
+export function preloadUiPanels(): void {
+    loadUiFrame('ui_panel_ink');
+    loadUiFrame('ui_panel_paper');
+    loadUiFrame('ui_panel_deep');
+}
+
+// 标准色 → 切图映射（页面传 bg: COLORS.panel 等标准色时同样命中切图）
+const SPRITE_PANEL_BY_KEY: Record<string, string> = {
+    [COLORS.panel]: 'ui_panel_ink',
+    [COLORS.panelPaper]: 'ui_panel_paper',
+    [COLORS.panelDeep]: 'ui_panel_deep',
+};
+
+// 把节点背景替换为九宫格切图（清掉 Graphics 绘制，禁 trim，见素材包 README §5）
+function applyPanelSprite(n: Node, sf: SpriteFrame): void {
+    const g = n.getComponent(Graphics);
+    if (g) g.destroy();
+    n['_bg'] = undefined;
+    n['_grad'] = undefined;
+    let sp = n.getComponent(Sprite);
+    if (!sp) sp = n.addComponent(Sprite);
+    sp.type = SPRITE_TYPE_SLICED;
+    sp.sizeMode = 0; // CUSTOM：按节点 contentSize 拉伸（九宫格负责圆角/描边不失真）
+    sp.trim = false;
+    sp.spriteFrame = sf;
+}
+
 export function makePanel(
     parent: Node,
     opts: { w?: number; h?: number; bg?: string; surface?: 'ink' | 'paper'; radius?: number } = {},
@@ -294,6 +351,34 @@ export function makePanel(
     const n = newNode('panel', parent);
     setSize(n, opts.w ?? 620, opts.h ?? 200);
     const surface = opts.surface ?? (opts.bg ? undefined : 'ink');
+
+    // 切图分支：surface 指定，或 bg 为标准面板色
+    let spriteName: string | null = null;
+    if (opts.bg) {
+        spriteName = SPRITE_PANEL_BY_KEY[opts.bg] ?? null;
+    } else if (surface === 'paper') {
+        spriteName = 'ui_panel_paper';
+    } else if (surface === 'ink') {
+        spriteName = 'ui_panel_ink';
+    }
+    if (spriteName) {
+        const cached = panelSfCache[spriteName];
+        if (cached) {
+            applyPanelSprite(n, cached);
+        } else {
+            // 未预载完成：先 Graphics 色板兜底，切图就绪后替换（节点可能已被销毁，判 isValid）
+            const fallback = opts.bg ?? (surface === 'paper' ? COLORS.panelPaper : COLORS.panel);
+            setBg(n, fallback);
+            setLine(n, surface === 'paper' ? COLORS.linePaper : COLORS.line);
+            setRadius(n, opts.radius ?? RADIUS.panel);
+            loadUiFrame(spriteName).then((sf) => {
+                if (sf && n.isValid) applyPanelSprite(n, sf);
+            });
+        }
+        return n;
+    }
+
+    // 原 Graphics 路径（自定义颜色 / 兜底）
     if (opts.bg) {
         setBg(n, opts.bg);
     } else if (surface === 'paper') {

@@ -4,7 +4,7 @@
 import { Node, UITransform } from 'cc';
 import { loadState, saveState, settleOffline } from '../logic/Idle';
 import { GameState } from '../logic/Save';
-import { makeLabel, makePanel, COLORS, setBg } from './widgets';
+import { makeLabel, makePanel, COLORS, setBg, preloadUiPanels } from './widgets';
 import { buildHome } from './pages/Home';
 import { buildTeam } from './pages/Team';
 import { buildGacha } from './pages/Gacha';
@@ -26,6 +26,7 @@ export class GameManager {
   }
 
   start(): void {
+    preloadUiPanels(); // 预载九宫格面板切图，makePanel 即刻可用
     // 离线收益结算
     const r = settleOffline(this.state);
     this.save();

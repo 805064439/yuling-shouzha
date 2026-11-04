@@ -149,12 +149,19 @@ async function main() {
   );
   report.spirits = spirits;
 
+  // 3.5) 检查 panel 节点：标准色面板应已用上九宫格切图（Sprite SLICED=1 且有 frame）
+  const panels = await evaluate(
+    `(()=>{try{const ui=window.__ui;if(!ui)return 'NO_UI';let total=0,sliced=0,withFrame=0;const walk=(n)=>{if(n.name==='panel'){total++;const sp=n.getComponent('cc.Sprite');if(sp){if(sp.spriteFrame)withFrame++;if(sp.type===1&&sp.spriteFrame)sliced++;}}n.children.forEach(walk);};walk(ui);return JSON.stringify({total,sliced,withFrame});}catch(e){return 'ERR '+e.message;}})()`,
+  );
+  report.panels = panels;
+
   await sleep(1500);
   console.log('==== VERIFY SPRITES ====');
   console.log('seeded    :', report.seeded);
   console.log('texCheck  :', report.texCheck);
   console.log('clickTeam :', report.clickTeam);
   console.log('spirits   :', report.spirits);
+  console.log('panels    :', report.panels);
   console.log('exceptions:', report.exceptions.length ? report.exceptions.slice(0, 5).join(' || ') : '(none)');
   console.log('consoleErr:', report.errors.length ? report.errors.slice(0, 5).join(' || ') : '(none)');
 
@@ -165,6 +172,7 @@ async function main() {
     String(report.spirits).includes('"sizeMode":0') &&
     String(report.spirits).includes('"ratioOk":true') &&
     String(report.spirits).includes('"boxW":150') && // 外框恒定 150×150，编队卡片大小统一
+    /"total":\d+,"sliced":[1-9]/.test(String(report.panels)) && // 面板已用九宫格切图
     report.exceptions.length === 0;
   console.log(ok ? 'SPRITES_OK' : 'SPRITES_FAIL');
   ws.close();
