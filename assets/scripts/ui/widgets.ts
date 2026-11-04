@@ -411,7 +411,9 @@ export function loadSpiritFrame(path: string): Promise<SpriteFrame | null> {
     });
 }
 
-// 立绘节点：加载成功后显示立绘（contain 等比适配），否则按 UI_DEBUG.emojiFallback 决定兜底
+// 立绘节点：外框恒定 size×size（保证网格/卡片布局整齐），内部 pic 子节点按原图
+// 宽高比 contain 等比缩放（立绘多为 2:3 竖版，若直接缩放外框会导致同排卡片大小不一）。
+// 加载失败时按 UI_DEBUG.emojiFallback 决定是否显示 emoji 兜底。
 export function makeSpirit(
     parent: Node,
     resPath: string,
@@ -419,13 +421,15 @@ export function makeSpirit(
     fallbackEmoji: string,
 ): Node {
     const n = newNode('spirit', parent);
-    setSize(n, size, size);
+    setSize(n, size, size); // 外框恒定：布局定位用它，不随图片比例变化
     const em = makeLabel(n, fallbackEmoji, { fontSize: Math.floor(size * 0.5) });
     em.setPosition(0, 0, 0);
     if (!UI_DEBUG.emojiFallback) em.active = false; // 正式版：不显示 emoji 兜底
+    const pic = newNode('pic', n);
+    setSize(pic, size, size);
     loadSpiritFrame(resPath).then((sf) => {
         if (!sf) return;
-        // 按原图宽高比 contain 适配：立绘多为 2:3 竖版，直接塞进正方形节点会被横向拉伸。
+        // 按原图宽高比 contain 适配：立绘多为 2:3 竖版，直接塞进正方形会被横向拉伸。
         const fw = sf.width || 1;
         const fh = sf.height || 1;
         const ratio = fw / fh;
@@ -436,9 +440,9 @@ export function makeSpirit(
         } else {
             w = size * ratio; // 竖图
         }
-        setSize(n, Math.round(w), Math.round(h));
-        let sp = n.getComponent(Sprite);
-        if (!sp) sp = n.addComponent(Sprite);
+        setSize(pic, Math.round(w), Math.round(h));
+        let sp = pic.getComponent(Sprite);
+        if (!sp) sp = pic.addComponent(Sprite);
         // sizeMode 用 CUSTOM(0)：按节点 UITransform 的 contentSize 缩放（web-mobile 构建不导出该枚举）
         sp.sizeMode = 0;
         sp.trim = false;

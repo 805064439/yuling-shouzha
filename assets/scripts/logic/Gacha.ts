@@ -95,28 +95,33 @@ export function doSummon(
   return draw(state, count);
 }
 
-// 一键抽光：优先十连，余下补单抽（仅消耗灵气）
-export function drawAll(state: GameState): { results: Spirit[]; refund: number } {
+// 一键抽光：优先十连，余下补单抽（仅消耗灵气）。
+// 安全上限：单次最多 MAX_DRAWS 抽——灵气极多时一次性算出几万次抽卡会撑爆内存/UI；
+// 循环按需扣灵气，到上限或灵气不足即停，剩余灵气留在账上（可再点继续抽）。
+export const DRAW_ALL_MAX = 2000;
+
+export function drawAll(state: GameState): { results: Spirit[]; refund: number; capped: boolean } {
   ensure(state);
   const g = GAME_CONFIG.gacha;
-  const ten = Math.floor(state.gold / g.tenCost);
-  const rem = state.gold - ten * g.tenCost;
-  const single = Math.floor(rem / g.singleCost);
-  if (ten === 0 && single === 0) return { results: [], refund: 0 };
-  state.gold -= ten * g.tenCost + single * g.singleCost;
-  let allResults: Spirit[] = [];
+  const allResults: Spirit[] = [];
   let totalRefund = 0;
-  for (let i = 0; i < ten; i++) {
+  let count = 0;
+  // 十连块
+  while (count + 10 <= DRAW_ALL_MAX && state.gold >= g.tenCost) {
     const r = draw(state, 10);
-    allResults = allResults.concat(r.results);
+    allResults.push(...r.results);
     totalRefund += r.refund;
+    count += 10;
   }
-  for (let i = 0; i < single; i++) {
+  // 余数单抽
+  while (count < DRAW_ALL_MAX && state.gold >= g.singleCost) {
     const r = draw(state, 1);
-    allResults = allResults.concat(r.results);
+    allResults.push(...r.results);
     totalRefund += r.refund;
+    count += 1;
   }
-  return { results: allResults, refund: totalRefund };
+  const capped = state.gold >= g.singleCost; // 到上限仍有灵气说明被截断了
+  return { results: allResults, refund: totalRefund, capped };
 }
 
 // —— 养成：升星 / 进化 ——

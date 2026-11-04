@@ -11,7 +11,10 @@ import { makeLabel, makeButton, makePanel, makeSpirit, flowH, COLORS } from '../
 function renderResult(rowParent: Node, ids: string[]): void {
   // 清空旧的展示（保留按钮区由 buildGacha 控制，这里只重建结果区）
   const old = rowParent.getChildByName('__result');
-  if (old) old.destroy();
+  if (old) {
+    old.removeFromParent(); // 立即脱离节点树，避免 destroy 延迟导致同名节点残留
+    old.destroy();
+  }
   const wrap = makePanel(rowParent, { w: 700, h: 220, bg: COLORS.panel });
   wrap.name = '__result';
   wrap.setPosition(0, 120, 0);
@@ -19,7 +22,11 @@ function renderResult(rowParent: Node, ids: string[]): void {
     makeLabel(wrap, '点击上方按钮开始召唤', { fontSize: 24, color: COLORS.sub }).setPosition(0, 0, 0);
     return;
   }
-  const cards: Node[] = ids.map((id) => {
+  // 抽光可能产出成百上千只——只渲染前 10 张卡，其余用汇总文字表示，
+  // 否则一次性创建上千个 Graphics/Label 节点会卡死甚至崩溃（尤其手机端）。
+  const MAX_CARDS = 10;
+  const shown = ids.slice(0, MAX_CARDS);
+  const cards: Node[] = shown.map((id) => {
     const s = SPIRIT_BY_ID[id];
     const c = makePanel(wrap, { w: 110, h: 150, bg: COLORS.bg });
     makeSpirit(c, spiritResPath(s, 0), 90, s ? s.icon : '❓').setPosition(0, 30, 0);
@@ -27,6 +34,9 @@ function renderResult(rowParent: Node, ids: string[]): void {
     return c;
   });
   flowH(wrap, cards, 0, 12);
+  if (ids.length > MAX_CARDS) {
+    makeLabel(wrap, `……共 ${ids.length} 只`, { fontSize: 22, color: COLORS.sub }).setPosition(0, -80, 0);
+  }
 }
 
 export function buildGacha(root: Node, gm: GameManager): void {
@@ -90,7 +100,11 @@ export function buildGacha(root: Node, gm: GameManager): void {
     }
     gm.save();
     renderResult(resultWrap, r.results.map((x) => x.id));
-    gm.toast(`抽了 ${r.results.length} 次 · 返还 ${r.refund} 灵气`);
+    gm.toast(
+      r.capped
+        ? `抽了 ${r.results.length} 次（单次上限，灵气还有剩，可再点）· 返还 ${r.refund}`
+        : `抽了 ${r.results.length} 次 · 返还 ${r.refund} 灵气`,
+    );
     const i2 = root.getChildByName('__info');
     if (i2) {
       const lab = i2.getComponent('cc.Label') as any;

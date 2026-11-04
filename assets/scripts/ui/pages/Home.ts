@@ -48,6 +48,7 @@ export function buildHome(root: Node, gm: GameManager): void {
   };
   mk('🛡 编队出战', 'team');
   mk('🎴 召唤精怪', 'gacha');
+  mk('📖 精怪图鉴', 'dex');
   mk('⚔ 自动战斗', 'battle');
   mk('🏪 灵物商店', 'shop');
   flowV(root, entries, 230, 28);

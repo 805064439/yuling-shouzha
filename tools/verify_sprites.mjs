@@ -142,9 +142,10 @@ async function main() {
   // 等立绘异步加载
   await sleep(6000);
 
-  // 3) 检查 spirit 节点：SpriteFrame 已挂、emoji 已隐藏、sizeMode=CUSTOM(0)、宽高比与原图一致
+  // 3) 检查 spirit 节点：外框恒定 size×size（同排卡片大小一致），
+  //    pic 子节点挂 SpriteFrame（contain 等比、sizeMode=CUSTOM(0)）、emoji 已隐藏
   const spirits = await evaluate(
-    `(()=>{try{const ui=window.__ui;if(!ui)return 'NO_UI';const out=[];const walk=(n)=>{if(n.name==='spirit'){const sp=n.getComponent('cc.Sprite');const em=n.children.find((x)=>x.name==='label');const ut=n.getComponent('cc.UITransform');const fw=sp&&sp.spriteFrame?sp.spriteFrame.width:1;const fh=sp&&sp.spriteFrame?sp.spriteFrame.height:1;const nw=ut?ut.width:0;const nh=ut?ut.height:0;out.push({hasSprite:!!sp,hasFrame:!!(sp&&sp.spriteFrame),emojiVisible:em?em.active:null,sizeMode:sp?sp.sizeMode:null,w:Math.round(nw),h:Math.round(nh),ratioOk:Math.abs((nw/nh)-(fw/fh))<0.02});}n.children.forEach(walk);};walk(ui);return JSON.stringify(out);}catch(e){return 'ERR '+e.message;}})()`,
+    `(()=>{try{const ui=window.__ui;if(!ui)return 'NO_UI';const out=[];const walk=(n)=>{if(n.name==='spirit'){const pic=n.children.find((x)=>x.name==='pic');const sp=pic?pic.getComponent('cc.Sprite'):null;const em=n.children.find((x)=>x.name==='label');const ut=n.getComponent('cc.UITransform');const put=pic?pic.getComponent('cc.UITransform'):null;const fw=sp&&sp.spriteFrame?sp.spriteFrame.width:1;const fh=sp&&sp.spriteFrame?sp.spriteFrame.height:1;const pw=put?put.width:0;const ph=put?put.height:0;out.push({hasSprite:!!sp,hasFrame:!!(sp&&sp.spriteFrame),emojiVisible:em?em.active:null,sizeMode:sp?sp.sizeMode:null,boxW:Math.round(ut?ut.width:0),boxH:Math.round(ut?ut.height:0),picW:Math.round(pw),picH:Math.round(ph),ratioOk:Math.abs((pw/ph)-(fw/fh))<0.02});}n.children.forEach(walk);};walk(ui);return JSON.stringify(out);}catch(e){return 'ERR '+e.message;}})()`,
   );
   report.spirits = spirits;
 
@@ -163,6 +164,7 @@ async function main() {
     String(report.spirits).includes('"emojiVisible":false') &&
     String(report.spirits).includes('"sizeMode":0') &&
     String(report.spirits).includes('"ratioOk":true') &&
+    String(report.spirits).includes('"boxW":150') && // 外框恒定 150×150，编队卡片大小统一
     report.exceptions.length === 0;
   console.log(ok ? 'SPRITES_OK' : 'SPRITES_FAIL');
   ws.close();
