@@ -517,14 +517,16 @@ export function makeSpirit(
     resPath: string,
     size: number,
     fallbackEmoji: string,
+    frameH?: number, // 可选外框高度：详情页等需要竖向大图时用（外框仍恒定，布局用）
 ): Node {
     const n = newNode('spirit', parent);
-    setSize(n, size, size); // 外框恒定：布局定位用它，不随图片比例变化
-    const em = makeLabel(n, fallbackEmoji, { fontSize: Math.floor(size * 0.5) });
+    const H = frameH && frameH > 0 ? frameH : size;
+    setSize(n, size, H); // 外框恒定：布局定位用它，不随图片比例变化
+    const em = makeLabel(n, fallbackEmoji, { fontSize: Math.floor(Math.min(size, H) * 0.5) });
     em.setPosition(0, 0, 0);
     if (!UI_DEBUG.emojiFallback) em.active = false; // 正式版：不显示 emoji 兜底
     const pic = newNode('pic', n);
-    setSize(pic, size, size);
+    setSize(pic, size, H);
     loadSpiritFrame(resPath).then((sf) => {
         if (!sf) return;
         // 按原图宽高比 contain 适配：立绘多为 2:3 竖版，直接塞进正方形会被横向拉伸。
@@ -532,11 +534,13 @@ export function makeSpirit(
         const fh = sf.height || 1;
         const ratio = fw / fh;
         let w = size;
-        let h = size;
-        if (ratio >= 1) {
-            h = size / ratio; // 横图
+        let h = H;
+        if (w / h > ratio) {
+            h = H;          // 外框比图更"胖"：以高度为准，宽 = 高 × 比例
+            w = H * ratio;
         } else {
-            w = size * ratio; // 竖图
+            w = size;       // 外框比图更"瘦"：以宽度为准，高 = 宽 / 比例
+            h = size / ratio;
         }
         setSize(pic, Math.round(w), Math.round(h));
         let sp = pic.getComponent(Sprite);

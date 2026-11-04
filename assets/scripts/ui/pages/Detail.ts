@@ -21,31 +21,32 @@ export function buildDetail(root: Node, gm: GameManager, id: string): void {
   const st = spiritStats(sp, prog);
   const owned = (s.collection[id] || 0) > 0;
 
-  const title = makeLabel(root, sp.name, { fontSize: 44, color: RARITY_COLOR[sp.rarity] });
-  title.setPosition(0, 580, 0);
+  const title = makeLabel(root, sp.name, { fontSize: 40, color: RARITY_COLOR[sp.rarity] });
+  title.setPosition(0, 630, 0);
   const rarityLbl = makeLabel(root, `${sp.rarity} · ${EVOLUTION.stages[prog.evo]} ★${prog.star}`, {
-    fontSize: 26, color: COLORS.sub,
+    fontSize: 22, color: COLORS.sub,
   });
-  rarityLbl.setPosition(0, 530, 0);
+  rarityLbl.setPosition(0, 588, 0);
 
   // 立绘纸舞台（铁律：深底不放裸立绘）：宣纸底 + 稀有度主题色渐变衬
-  const stage = makeSpiritStage(root, 340, 340, RARITY_COLOR[sp.rarity]);
-  stage.setPosition(0, 250, 0);
-  makeSpirit(stage, spiritResPath(sp, prog.evo), 300, sp.icon).setPosition(0, 0, 0);
+  // 大立绘版式：竖向 400×560 舞台，立绘外框 360×520（2:3 竖版立绘可铺满高度）
+  const stage = makeSpiritStage(root, 400, 560, RARITY_COLOR[sp.rarity]);
+  stage.setPosition(0, 270, 0);
+  makeSpirit(stage, spiritResPath(sp, prog.evo), 360, sp.icon, 520).setPosition(0, 0, 0);
 
   // 当前形态展示（初生/觉醒/真灵，由升星/进化推进）
   const stageInfo = makeLabel(root, `当前形态：${EVOLUTION.stages[prog.evo]}`, { fontSize: 22, color: COLORS.sub });
-  stageInfo.setPosition(0, 60, 0);
+  stageInfo.setPosition(0, -52, 0);
 
   const stats = makeLabel(
     root,
     `ATK ${st.atk}　HP ${st.hp}\n拥有 ×${s.collection[id] || 0}　灵核 ${s.cores}`,
     { fontSize: 26, color: COLORS.text, wrapWidth: 600 },
   );
-  stats.setPosition(0, -10, 0);
+  stats.setPosition(0, -115, 0);
 
-  const desc = makePanel(root, { w: 660, h: 90, bg: COLORS.panel });
-  desc.setPosition(0, -130, 0);
+  const desc = makePanel(root, { w: 660, h: 80, bg: COLORS.panel });
+  desc.setPosition(0, -205, 0);
   makeLabel(desc, sp.desc, { fontSize: 22, color: COLORS.sub, wrapWidth: 620 }).setPosition(0, 0, 0);
 
   // 升星按钮
@@ -65,7 +66,7 @@ export function buildDetail(root: Node, gm: GameManager, id: string): void {
     },
     { w: 320, h: 76, bg: canStar ? COLORS.btnPrimary : COLORS.btn },
   );
-  starBtn.setPosition(-180, -260, 0);
+  starBtn.setPosition(-180, -315, 0);
 
   // 进化按钮
   const canEvo = owned && prog.evo < 2 && prog.star >= maxStar;
@@ -85,7 +86,7 @@ export function buildDetail(root: Node, gm: GameManager, id: string): void {
     },
     { w: 320, h: 76, bg: canEvo ? COLORS.btnPrimary : COLORS.btn },
   );
-  evoBtn.setPosition(180, -260, 0);
+  evoBtn.setPosition(180, -315, 0);
 
   makeButton(root, '返回图鉴', () => gm.go('dex'), { w: 300, h: 70 }).setPosition(0, -600, 0);
 }

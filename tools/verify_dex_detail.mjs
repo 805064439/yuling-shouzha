@@ -90,7 +90,7 @@ async function main() {
   await sleep(9000); // 等详情页纸舞台+立绘
 
   const detail = await evaluate(
-    `(()=>{const out={stage:0,stageSprite:0};const walk=(n)=>{if(n.name==='spiritStage'){out.stage++;const sp=n.getComponent('cc.Sprite');if(sp&&sp.spriteFrame)out.stageSprite=1;}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify(out);})()`,
+    `(()=>{const out={stage:0,stageSprite:0,stageH:0};const walk=(n)=>{if(n.name==='spiritStage'){out.stage++;const ut=n.getComponent('cc.UITransform');if(ut)out.stageH=ut.height;const sp=n.getComponent('cc.Sprite');if(sp&&sp.spriteFrame)out.stageSprite=1;}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify(out);})()`,
   );
 
   console.log('==== VERIFY DEX/DETAIL ====');
@@ -107,6 +107,7 @@ async function main() {
     clickCard === 'CLICKED:草灵' &&
     String(detail).includes('"stage":1') &&
     String(detail).includes('"stageSprite":1') &&
+    /"stageH":(5[2-9]\d|6\d\d)/.test(String(detail)) && // 大立绘版式：舞台高度 ≥ 520
     report.exceptions.length === 0;
   console.log(ok ? 'DEX_DETAIL_OK' : 'DEX_DETAIL_FAIL');
   ws.close();
