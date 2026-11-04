@@ -301,6 +301,7 @@ export function loadUiFrame(name: string): Promise<SpriteFrame | null> {
     const toFrame = (tex: Texture2D | null): SpriteFrame | null => {
         if (!tex) return null;
         const frame = new SpriteFrame();
+        frame.name = name; // 打标：运行时/验证脚本可分辨 ink/paper/deep
         frame.texture = tex;
         frame.rect = new Rect(0, 0, tex.width, tex.height);
         frame.originalSize = new Size(tex.width, tex.height);
@@ -394,6 +395,8 @@ export function makePanel(
 
 // ─────────────────────────────────────────────────────────────
 // 立绘纸舞台：提案 §1 铁律的代码化——立绘坐纸板，板底衬精灵主题色渐变
+//   底 = paper 九宫格切图（宣纸纹理，可见于渐变外圈 12px）；
+//   衬 = 内缩 12px 的主题色渐变（顶 = 主题色加白 40%，底 = 主题色）；
 //   用法：makeSpiritStage(parent, w, h, 精灵主题色hex)，再把 makeSpirit 挂进去
 // ─────────────────────────────────────────────────────────────
 export function makeSpiritStage(
@@ -404,11 +407,21 @@ export function makeSpiritStage(
 ): Node {
     const n = newNode('spiritStage', parent);
     setSize(n, w, h);
-    setBg(n, COLORS.panelPaper);
-    // 内缩 12px 的主题色渐变底衬：顶部 = 主题色加白 40%，底部 = 主题色
-    setGradient(n, lightenHex(themeHex, 0.4), themeHex, 12);
-    setLine(n, COLORS.linePaper);
-    setRadius(n, RADIUS.panel);
+    // 纸面切图打底（未就绪先 Graphics 色板兜底，加载后替换）
+    const cached = panelSfCache['ui_panel_paper'];
+    if (cached) {
+        applyPanelSprite(n, cached);
+    } else {
+        setBg(n, COLORS.panelPaper);
+        loadUiFrame('ui_panel_paper').then((sf) => {
+            if (sf && n.isValid) applyPanelSprite(n, sf);
+        });
+    }
+    // 内缩主题色渐变衬（子节点，位于切图之上、立绘之下）
+    const tint = newNode('tint', n);
+    setSize(tint, w - 24, h - 24);
+    setGradient(tint, lightenHex(themeHex, 0.4), themeHex, 0);
+    setRadius(tint, RADIUS.card);
     return n;
 }
 

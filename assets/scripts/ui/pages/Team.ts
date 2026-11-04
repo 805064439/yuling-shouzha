@@ -12,6 +12,8 @@ import {
   makeSpirit,
   flowGrid,
   attachClick,
+  setLine,
+  shadeHex,
   COLORS,
 } from '../widgets';
 
@@ -52,25 +54,24 @@ export function buildTeam(root: Node, gm: GameManager): void {
     const inTeam = s.team.includes(sp.id);
     const prog = s.prog[sp.id] || { star: 1, evo: 0 };
     const st = spiritStats(sp, prog);
-    const card = makePanel(root, {
-      w: 200,
-      h: 270,
-      bg: inTeam ? '#2f3a66' : COLORS.panel,
-    });
+    // 纸面卡片（内容载体）；上阵高亮 = 金描边（不做深色异类卡，保持纸面统一）
+    const card = makePanel(root, { w: 200, h: 270, surface: 'paper' });
+    if (inTeam) setLine(card, COLORS.btnPrimary);
     const spr = makeSpirit(card, spiritResPath(sp, prog.evo), 150, sp.icon);
     spr.setPosition(0, 55, 0);
-    makeLabel(card, sp.name, { fontSize: 24, color: RARITY_COLOR[sp.rarity] }).setPosition(0, -55, 0);
+    // 纸面文字用深色系：稀有度色压暗保证对比（README §4 色板锚点）
+    makeLabel(card, sp.name, { fontSize: 24, color: shadeHex(RARITY_COLOR[sp.rarity], -0.35) }).setPosition(0, -55, 0);
     makeLabel(card, `${EVOLUTION.stages[prog.evo]} ★${prog.star}`, {
       fontSize: 18,
-      color: COLORS.sub,
+      color: COLORS.ink,
     }).setPosition(0, -85, 0);
-    makeLabel(card, `ATK ${st.atk} · HP ${st.hp}`, { fontSize: 17, color: COLORS.sub }).setPosition(
+    makeLabel(card, `ATK ${st.atk} · HP ${st.hp}`, { fontSize: 17, color: '#6E6656' }).setPosition(
       0,
       -110,
       0,
     );
     if (inTeam) {
-      makeLabel(card, '✓ 上阵', { fontSize: 20, color: '#7ec850' }).setPosition(0, -140, 0);
+      makeLabel(card, '✓ 上阵', { fontSize: 20, color: shadeHex('#5FAE57', -0.25) }).setPosition(0, -140, 0);
     }
     attachClick(card, () => toggleTeam(gm, sp.id));
     return card;

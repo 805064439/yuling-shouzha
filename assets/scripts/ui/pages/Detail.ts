@@ -7,7 +7,7 @@ import { SPIRIT_BY_ID, spiritStats, spiritResPath } from '../../logic/Spirits';
 import { RARITY_COLOR, EVOLUTION } from '../../logic/GameConfig';
 import { doStarUp, doEvolve, getProg } from '../../logic/Gacha';
 import { STAR_COST } from '../../logic/GameConfig';
-import { makeLabel, makeButton, makePanel, makeSpirit, COLORS } from '../widgets';
+import { makeLabel, makeButton, makePanel, makeSpirit, makeSpiritStage, COLORS } from '../widgets';
 
 export function buildDetail(root: Node, gm: GameManager, id: string): void {
   root.removeAllChildren();
@@ -28,8 +28,10 @@ export function buildDetail(root: Node, gm: GameManager, id: string): void {
   });
   rarityLbl.setPosition(0, 530, 0);
 
-  const big = makeSpirit(root, spiritResPath(sp, prog.evo), 320, sp.icon);
-  big.setPosition(0, 250, 0);
+  // 立绘纸舞台（铁律：深底不放裸立绘）：宣纸底 + 稀有度主题色渐变衬
+  const stage = makeSpiritStage(root, 340, 340, RARITY_COLOR[sp.rarity]);
+  stage.setPosition(0, 250, 0);
+  makeSpirit(stage, spiritResPath(sp, prog.evo), 300, sp.icon).setPosition(0, 0, 0);
 
   // 当前形态展示（初生/觉醒/真灵，由升星/进化推进）
   const stageInfo = makeLabel(root, `当前形态：${EVOLUTION.stages[prog.evo]}`, { fontSize: 22, color: COLORS.sub });

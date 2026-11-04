@@ -6,7 +6,7 @@ import type { GameManager } from '../GameManager';
 import { GAME_CONFIG, RARITY_COLOR as RC } from '../../logic/GameConfig';
 import { doSummon, drawAll, canSummon, ensure } from '../../logic/Gacha';
 import { SPIRIT_BY_ID, spiritResPath } from '../../logic/Spirits';
-import { makeLabel, makeButton, makePanel, makeSpirit, flowH, COLORS } from '../widgets';
+import { makeLabel, makeButton, makePanel, makeSpirit, flowH, shadeHex, COLORS } from '../widgets';
 
 function renderResult(rowParent: Node, ids: string[]): void {
   // 清空旧的展示（保留按钮区由 buildGacha 控制，这里只重建结果区）
@@ -15,11 +15,12 @@ function renderResult(rowParent: Node, ids: string[]): void {
     old.removeFromParent(); // 立即脱离节点树，避免 destroy 延迟导致同名节点残留
     old.destroy();
   }
-  const wrap = makePanel(rowParent, { w: 700, h: 220, bg: COLORS.panel });
+  // 双面层：结果区 = 纸面外框，结果卡 = deep 内嵌
+  const wrap = makePanel(rowParent, { w: 700, h: 220, surface: 'paper' });
   wrap.name = '__result';
   wrap.setPosition(0, 120, 0);
   if (ids.length === 0) {
-    makeLabel(wrap, '点击上方按钮开始召唤', { fontSize: 24, color: COLORS.sub }).setPosition(0, 0, 0);
+    makeLabel(wrap, '点击上方按钮开始召唤', { fontSize: 24, color: '#6E6656' }).setPosition(0, 0, 0);
     return;
   }
   // 抽光可能产出成百上千只——只渲染前 10 张卡，其余用汇总文字表示，
@@ -28,14 +29,14 @@ function renderResult(rowParent: Node, ids: string[]): void {
   const shown = ids.slice(0, MAX_CARDS);
   const cards: Node[] = shown.map((id) => {
     const s = SPIRIT_BY_ID[id];
-    const c = makePanel(wrap, { w: 110, h: 150, bg: COLORS.bg });
+    const c = makePanel(wrap, { w: 110, h: 150, bg: COLORS.panelDeep });
     makeSpirit(c, spiritResPath(s, 0), 90, s ? s.icon : '❓').setPosition(0, 30, 0);
-    if (s) makeLabel(c, s.name, { fontSize: 18, color: RC[s.rarity] }).setPosition(0, -50, 0);
+    if (s) makeLabel(c, s.name, { fontSize: 18, color: shadeHex(RC[s.rarity], -0.35) }).setPosition(0, -50, 0);
     return c;
   });
   flowH(wrap, cards, 0, 12);
   if (ids.length > MAX_CARDS) {
-    makeLabel(wrap, `……共 ${ids.length} 只`, { fontSize: 22, color: COLORS.sub }).setPosition(0, -80, 0);
+    makeLabel(wrap, `……共 ${ids.length} 只`, { fontSize: 22, color: '#6E6656' }).setPosition(0, -80, 0);
   }
 }
 

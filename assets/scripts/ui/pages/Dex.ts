@@ -5,7 +5,7 @@ import { Node } from 'cc';
 import type { GameManager } from '../GameManager';
 import { SPIRITS, spiritStats, spiritResPath } from '../../logic/Spirits';
 import { RARITY_COLOR, EVOLUTION } from '../../logic/GameConfig';
-import { makeLabel, makeButton, makePanel, makeSpirit, flowGrid, attachClick, COLORS } from '../widgets';
+import { makeLabel, makeButton, makePanel, makeSpirit, flowGrid, attachClick, shadeHex, COLORS } from '../widgets';
 
 export function buildDex(root: Node, gm: GameManager): void {
   root.removeAllChildren();
@@ -20,19 +20,21 @@ export function buildDex(root: Node, gm: GameManager): void {
 
   const cards: Node[] = SPIRITS.map((sp) => {
     const owned = (s.collection[sp.id] || 0) > 0;
-    const card = makePanel(root, { w: 200, h: 280, bg: owned ? COLORS.panel : '#1c1e30' });
-    if (!owned) card.setPosition(card.position.x, card.position.y, 0);
+    // 双面层：已拥有 = 纸面卡（paper 切图）；未获得 = deep 内嵌卡（deep 切图，README §1 指定用途）
+    const card = makePanel(root, owned
+      ? { w: 200, h: 280, surface: 'paper' }
+      : { w: 200, h: 280, bg: COLORS.panelDeep });
     const prog = s.prog[sp.id] || { star: 1, evo: 0 };
     makeSpirit(card, spiritResPath(sp, prog.evo), 150, owned ? sp.icon : '❔').setPosition(0, 55, 0);
-    makeLabel(card, owned ? sp.name : '？？？', { fontSize: 24, color: owned ? RARITY_COLOR[sp.rarity] : COLORS.sub }).setPosition(0, -55, 0);
+    makeLabel(card, owned ? sp.name : '？？？', { fontSize: 24, color: owned ? shadeHex(RARITY_COLOR[sp.rarity], -0.35) : '#8C8270' }).setPosition(0, -55, 0);
     if (owned) {
-      makeLabel(card, `${EVOLUTION.stages[prog.evo]} ★${prog.star}`, { fontSize: 18, color: COLORS.sub }).setPosition(0, -85, 0);
+      makeLabel(card, `${EVOLUTION.stages[prog.evo]} ★${prog.star}`, { fontSize: 18, color: COLORS.ink }).setPosition(0, -85, 0);
       const st = spiritStats(sp, prog);
-      makeLabel(card, `ATK ${st.atk} · HP ${st.hp}`, { fontSize: 16, color: COLORS.sub }).setPosition(0, -110, 0);
-      makeLabel(card, `拥有 ×${s.collection[sp.id]}`, { fontSize: 15, color: COLORS.sub }).setPosition(0, -135, 0);
+      makeLabel(card, `ATK ${st.atk} · HP ${st.hp}`, { fontSize: 16, color: '#6E6656' }).setPosition(0, -110, 0);
+      makeLabel(card, `拥有 ×${s.collection[sp.id]}`, { fontSize: 15, color: '#6E6656' }).setPosition(0, -135, 0);
       attachClick(card, () => gm.go('detail', sp.id));
     } else {
-      makeLabel(card, '未拥有', { fontSize: 18, color: COLORS.sub }).setPosition(0, -85, 0);
+      makeLabel(card, '未拥有', { fontSize: 18, color: '#8C8270' }).setPosition(0, -85, 0);
     }
     return card;
   });
