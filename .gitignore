@@ -26,3 +26,4 @@ build_log*.txt
 build_*.log
 pending_art/
 tools/keyed_preview.jpg
+tools/cloudflared.exe
