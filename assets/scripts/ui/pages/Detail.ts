@@ -9,7 +9,7 @@ import { doStarUp, doEvolve, getProg } from '../../logic/Gacha';
 import { STAR_COST } from '../../logic/GameConfig';
 import { makeLabel, makeButton, makePanel, makeSpirit, makeSpiritStage, COLORS } from '../widgets';
 
-export function buildDetail(root: Node, gm: GameManager, id: string): void {
+export function buildDetail(root: Node, gm: GameManager, id: string, previewEvo?: number): void {
   root.removeAllChildren();
   const s = gm.state;
   const sp = SPIRIT_BY_ID[id];
@@ -20,6 +20,7 @@ export function buildDetail(root: Node, gm: GameManager, id: string): void {
   const prog = getProg(s, id);
   const st = spiritStats(sp, prog);
   const owned = (s.collection[id] || 0) > 0;
+  const viewEvo = previewEvo ?? prog.evo; // 当前预览的形态（进页默认展示实际形态）
 
   const title = makeLabel(root, sp.name, { fontSize: 40, color: RARITY_COLOR[sp.rarity] });
   title.setPosition(0, 630, 0);
@@ -31,12 +32,16 @@ export function buildDetail(root: Node, gm: GameManager, id: string): void {
   // 立绘纸舞台（铁律：深底不放裸立绘）：宣纸底 + 稀有度主题色渐变衬
   // 大立绘版式：竖向 400×560 舞台，立绘外框 360×520（2:3 竖版立绘可铺满高度）
   const stage = makeSpiritStage(root, 400, 560, RARITY_COLOR[sp.rarity]);
-  stage.setPosition(0, 270, 0);
-  makeSpirit(stage, spiritResPath(sp, prog.evo), 360, sp.icon, 520).setPosition(0, 0, 0);
+  stage.setPosition(0, 280, 0);
+  makeSpirit(stage, spiritResPath(sp, viewEvo), 360, sp.icon, 520).setPosition(0, 0, 0);
 
-  // 当前形态展示（初生/觉醒/真灵，由升星/进化推进）
-  const stageInfo = makeLabel(root, `当前形态：${EVOLUTION.stages[prog.evo]}`, { fontSize: 22, color: COLORS.sub });
-  stageInfo.setPosition(0, -52, 0);
+  // 三形态立绘切换页签：初生 / 觉醒 / 真灵，点谁看谁的立绘
+  EVOLUTION.stages.forEach((name, e) => {
+    makeButton(root, name, () => {
+      if (e !== viewEvo) buildDetail(root, gm, id, e);
+    }, { w: 118, h: 44, bg: e === viewEvo ? COLORS.btnPrimary : COLORS.btn, fontSize: 22 })
+      .setPosition(-126 + e * 126, -50, 0);
+  });
 
   const stats = makeLabel(
     root,

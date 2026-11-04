@@ -7,6 +7,8 @@ import path from 'node:path';
 
 const TARGET = process.argv[2] || 'http://127.0.0.1:8088/';
 const OUT = process.argv[3] || 'tools/detail_shot.png';
+const SEED = process.argv[4] || JSON.stringify({ collection:{cao:2,lu:1}, gold:500, tickets:1, prog:{cao:{star:1,evo:1},lu:{star:1,evo:0}} });
+const CARD = process.argv[5] || '草灵'; // 要截图的精怪名
 const PORT = 9226;
 const CHROME_CANDIDATES = [
   'C:/Users/admin/AppData/Local/Google/Chrome/Application/chrome.exe',
@@ -50,7 +52,7 @@ async function main() {
   await send('Page.enable');
   await send('Page.navigate', { url: TARGET });
   await sleep(10000);
-  await evaluate(`localStorage.setItem('ylsz_save', JSON.stringify({collection:{cao:2,lu:1}, gold:500, tickets:1, prog:{cao:{star:1,evo:1},lu:{star:1,evo:0}}})); 'SEEDED'`);
+  await evaluate(`localStorage.setItem('ylsz_save', JSON.stringify(${SEED})); 'SEEDED'`);
   await send('Page.reload');
   for (let i = 0; i < 45; i++) {
     await sleep(2000);
@@ -59,7 +61,7 @@ async function main() {
   await sleep(2000);
   await evaluate(`(()=>{const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('精怪图鉴'))c.emit('click');}}walk(c);}};walk(window.__ui);return 'OK';})()`);
   await sleep(8000);
-  await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='panel'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string==='草灵'){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
+  await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='panel'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string==='${CARD}'){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
   await sleep(12000); // 等大立绘（1-2MB）加载完成
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(OUT, Buffer.from(shot.data, 'base64'));

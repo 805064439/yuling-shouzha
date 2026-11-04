@@ -90,14 +90,25 @@ async function main() {
   await sleep(9000); // 等详情页纸舞台+立绘
 
   const detail = await evaluate(
-    `(()=>{const out={stage:0,stageSprite:0,stageH:0};const walk=(n)=>{if(n.name==='spiritStage'){out.stage++;const ut=n.getComponent('cc.UITransform');if(ut)out.stageH=ut.height;const sp=n.getComponent('cc.Sprite');if(sp&&sp.spriteFrame)out.stageSprite=1;}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify(out);})()`,
+    `(()=>{const out={stage:0,stageSprite:0,stageH:0,tabs:[]};const walk=(n)=>{if(n.name==='spiritStage'){out.stage++;const ut=n.getComponent('cc.UITransform');if(ut)out.stageH=ut.height;const sp=n.getComponent('cc.Sprite');if(sp&&sp.spriteFrame)out.stageSprite=1;}if(n.name==='btn'){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&['初生','觉醒','真灵'].includes(s.string))out.tabs.push(s.string);}}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify(out);})()`,
+  );
+
+  // 点「觉醒」页签，验证三形态立绘切换
+  const clickTab = await evaluate(
+    `(()=>{let hit=null;const walk=(n)=>{if(hit)return;if(n.name==='btn'){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string==='觉醒'){n.emit('click');hit='OK';return;}}}n.children.forEach(walk);};walk(window.__ui);return hit||'NOT_FOUND';})()`,
+  );
+  await sleep(9000); // 等觉醒立绘（1-2MB）加载
+  const afterTab = await evaluate(
+    `(()=>{const out={stage:0,stageSprite:0};const walk=(n)=>{if(n.name==='spiritStage'){out.stage++;const sp=n.getComponent('cc.Sprite');if(sp&&sp.spriteFrame)out.stageSprite=1;}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify(out);})()`,
   );
 
   console.log('==== VERIFY DEX/DETAIL ====');
   console.log('clickDex  :', clickDex);
   console.log('dexPanels :', dexPanels, '(paper=已拥有卡, deep=未获得卡)');
   console.log('clickCard :', clickCard);
-  console.log('detail    :', detail, '(stage=纸舞台)');
+  console.log('detail    :', detail, '(stage=纸舞台, tabs=形态页签)');
+  console.log('clickTab  :', clickTab, '(点觉醒页签)');
+  console.log('afterTab  :', afterTab, '(切形态后舞台仍正常)');
   console.log('exceptions:', report.exceptions.length ? report.exceptions.slice(0, 5).join(' || ') : '(none)');
   console.log('consoleErr:', report.errors.length ? report.errors.slice(0, 5).join(' || ') : '(none)');
   const ok =
@@ -108,6 +119,10 @@ async function main() {
     String(detail).includes('"stage":1') &&
     String(detail).includes('"stageSprite":1') &&
     /"stageH":(5[2-9]\d|6\d\d)/.test(String(detail)) && // 大立绘版式：舞台高度 ≥ 520
+    String(detail).includes('"tabs":["初生","觉醒","真灵"]') && // 三形态页签
+    clickTab === 'OK' &&
+    String(afterTab).includes('"stage":1') &&
+    String(afterTab).includes('"stageSprite":1') &&
     report.exceptions.length === 0;
   console.log(ok ? 'DEX_DETAIL_OK' : 'DEX_DETAIL_FAIL');
   ws.close();

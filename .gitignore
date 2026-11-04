@@ -24,3 +24,5 @@ desktop.ini
 # 构建日志
 build_log*.txt
 build_*.log
+pending_art/
+tools/keyed_preview.jpg
