@@ -1,0 +1,23 @@
+{
+  "name": "yuling-shouzha",
+  "version": "1.0.0",
+  "description": "育灵手札 - 灵怪放置养成小游戏（Cocos Creator 3.8 / web-mobile / 微信小游戏）",
+  "creator": {
+    "version": "3.8.8"
+  },
+  "main": "preview-template/index.js",
+  "author": "Zhong",
+  "license": "MIT",
+  "keywords": [
+    "cocos-creator",
+    "idle-game",
+    "incremental-game",
+    "wechat-minigame",
+    "typescript"
+  ],
+  "pink": {
+    "uuid": "55751fdb-1e73-48c3-8900-f32bcb76635c",
+    "version": "1.127.0"
+  },
+  "uuid": "b46a11be-3b86-4963-9318-c5ca93a03729"
+}

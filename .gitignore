@@ -1,0 +1,26 @@
+# Cocos Creator 生成目录（均可由编辑器/构建重建）
+library/
+library_bak_*/
+temp/
+local/
+profiles/
+build/
+.creator/
+extensions/
+
+# 无头诊断用的 Chrome 用户数据缓存
+.cdchrome*/
+
+# 日志与临时文件
+build_*.log
+*.log
+*.tmp
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 构建日志
+build_log*.txt
+build_*.log
