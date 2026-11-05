@@ -6,7 +6,12 @@ import sys
 import numpy as np
 from PIL import Image
 
-def key_bg(src, dst, w=640, h=960):
+def key_bg(src, dst, w=640, h=960, fit=None):
+    # fit=None     : 2:3 竖版原图，直接缩放到 w×h（默认，历史行为）
+    # fit='contain': 非 2:3 原图等比缩入画布、居中，不变形但人物偏小
+    # fit='cover'  : 非 2:3 原图等比放大到 0.90H，水平居中裁切、垂直居中贴回
+    #                （横构图躺姿立绘用：既不变形，视觉高度又接近其它立绘）
+    COVER_FRAC = 0.90
     im = Image.open(src).convert('RGB')
     a = np.asarray(im).astype(np.float32)
     h0, w0 = a.shape[:2]
@@ -35,15 +40,33 @@ def key_bg(src, dst, w=640, h=960):
         r = np.where(m, np.maximum(g, r - excess * 0.8), r)
         b = np.where(m, np.maximum(g, b - excess * 0.8), b)
     out = np.stack([r, g, b, alpha * 255.0], axis=-1).astype(np.uint8)
-    img = Image.fromarray(out, 'RGBA').resize((w, h), Image.LANCZOS)
+    img = Image.fromarray(out, 'RGBA')
+    if fit in ('contain', 'cover'):
+        # 先裁掉透明边，再等比缩放；绝不非等比拉伸
+        bb = img.getchannel('A').point(lambda p: 255 if p > 16 else 0).getbbox()
+        if bb:
+            img = img.crop(bb)
+        scale = min(w / img.width, h / img.height) if fit == 'contain' else COVER_FRAC * h / img.height
+        nw = max(1, round(img.width * scale))
+        nh = max(1, round(img.height * scale))
+        big = img.resize((nw, nh), Image.LANCZOS)
+        # 水平方向：超出画布则居中裁切，不足则居中留白（两种情况统一处理）
+        left = max(0, (nw - w) // 2)
+        strip = big.crop((left, 0, min(left + w, nw), nh))
+        canvas = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        canvas.paste(strip, ((w - strip.width) // 2, (h - strip.height) // 2))
+        img = canvas
+    else:
+        img = img.resize((w, h), Image.LANCZOS)
     # 清理缩放后的低 alpha 噪点，避免边缘白/彩边
     arr = np.asarray(img).astype(np.float32)
     arr[..., 3] = np.where(arr[..., 3] < 12, 0, arr[..., 3])
     Image.fromarray(arr.astype(np.uint8), 'RGBA').save(dst, optimize=True)
-    print(f'{src} -> {dst} {w}x{h} bg={bg.astype(int).tolist()} ok')
+    print(f'{src} -> {dst} {w}x{h} fit={fit} bg={bg.astype(int).tolist()} ok')
 
 if __name__ == '__main__':
     src, dst = sys.argv[1], sys.argv[2]
     w = int(sys.argv[3]) if len(sys.argv) > 3 else 640
     h = int(sys.argv[4]) if len(sys.argv) > 4 else 960
-    key_bg(src, dst, w, h)
+    fit = sys.argv[5] if len(sys.argv) > 5 else None
+    key_bg(src, dst, w, h, fit)

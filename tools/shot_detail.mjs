@@ -63,14 +63,17 @@ async function main() {
     // 点战斗页导航里的「主角」按钮进主角页
     await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='btn'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('主角')){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
     await sleep(9000);
-  } else if (CARD === '__enemy_dex__' || CARD === '__enemy_detail__') {
+  } else if (CARD === '__enemy_dex__' || CARD.startsWith('__enemy_detail__')) {
     // 进图鉴 → 切「蚀灵教」页签 →（详情模式再点一张敌人卡）
+    // 支持 '__enemy_detail__:<敌人名>' 指定任意敌人，默认教主
+    const enemyName = CARD.startsWith('__enemy_detail__:')
+      ? CARD.slice('__enemy_detail__:'.length) : '蚀灵教主·馁';
     await evaluate(`(()=>{const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('图鉴'))c.emit('click');}}walk(c);}};walk(window.__ui);return 'OK';})()`);
     await sleep(8000);
     await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='btn'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('蚀灵教')){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
     await sleep(9000);
-    if (CARD === '__enemy_detail__') {
-      await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='panel'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string==='蚀灵教主·馁'){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
+    if (CARD.startsWith('__enemy_detail__')) {
+      await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='panel'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string===${JSON.stringify(enemyName)}){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
       await sleep(12000); // 等大立绘加载
     }
   } else if (CARD !== '__battle__') {
