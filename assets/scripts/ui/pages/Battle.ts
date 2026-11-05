@@ -9,6 +9,7 @@ import { SPIRIT_BY_ID, spiritResPath } from '../../logic/Spirits';
 import { EnemyDef } from '../../logic/Enemies';
 import { enemyResPath } from '../../logic/Enemies';
 import { RARITY_COLOR } from '../../logic/GameConfig';
+import { stageLabel, isBossWave, isEliteWave } from '../../logic/Difficulty';
 import { makeLabel, makeButton, makePanel, makeSpirit, makeSpiritStage, setSize, setBg, COLORS } from '../widgets';
 
 const ENEMY_SLOT = { w: 160, h: 175, pic: 148, picH: 158 }; // 敌方立绘槽（3 只）
@@ -18,6 +19,7 @@ const ALLY_ROW_Y = [235, 5]; // 我方两行的纵坐标
 export function buildBattle(root: Node, gm: GameManager): void {
   root.removeAllChildren();
   const s = gm.state;
+  const startWave = Math.max(1, Math.floor(s.wave || 1));
 
   // 顶部信息栏（原首页的角色状态）
   const info = makeLabel(
@@ -32,7 +34,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
   hpBg.setPosition(0, 566, 0);
   const hpFill = makePanel(hpBg, { w: 620, h: 40, bg: '#e05a6f' });
   hpFill.setPosition(0, 0, 1);
-  const hpLbl = makeLabel(hpBg, '敌方 · 第 1 波', { fontSize: 20, color: '#ffffff' });
+  const hpLbl = makeLabel(hpBg, `敌方 · ${stageLabel(startWave)}`, { fontSize: 20, color: '#ffffff' });
   hpLbl.setPosition(0, 0, 2);
 
   const enemyRow = new Node('enemyRow');
@@ -119,27 +121,33 @@ export function buildBattle(root: Node, gm: GameManager): void {
   // —— 战斗日志 ——
   const logPanel = makePanel(root, { w: 660, h: 175, bg: COLORS.panel });
   logPanel.setPosition(0, -235, 0);
-  const logLabel = makeLabel(logPanel, '挂机战斗中…', { fontSize: 20, color: COLORS.sub, wrapWidth: 620 });
+  const logLabel = makeLabel(logPanel, `${stageLabel(startWave)} · 挂机战斗中…`, { fontSize: 20, color: COLORS.sub, wrapWidth: 620 });
   logLabel.setPosition(0, 0, 0);
 
-  // —— 战斗驱动：进页即战 ——
+  // —— 战斗驱动：进页即战（波次变化时落盘，切页面/重开继续当前梯队）——
   const battle = new Battle(s, (msg: string) => {
     const cur = (logLabel.getComponent('cc.Label') as any).string || '';
     const lines = cur.split('\n').filter(Boolean);
     lines.push(msg);
     const tail = lines.slice(-5).join('\n');
     (logLabel.getComponent('cc.Label') as any).string = tail;
-  });
+  }, () => gm.save());
 
   const onTick = (ev: BattleEvent) => {
     const w = Math.max(0, Math.min(1, ev.ratio)) * 620;
     setSize(hpFill, w, 40);
-    setBg(hpFill, '#e05a6f');
-    if (ev.wave) (hpLbl.getComponent('cc.Label') as any).string = `敌方 · 第 ${ev.wave} 波`;
+    // 关底 / 教主波血条换色（按当前波次判断，普通 tick 也保持，不会被刷回普通色）
+    const curWave = battle.wave;
+    const hpColor = isBossWave(curWave) ? '#c8324b'
+      : isEliteWave(curWave) ? '#d97a3c' : '#e05a6f';
+    setBg(hpFill, hpColor);
+    if (ev.wave) (hpLbl.getComponent('cc.Label') as any).string = `敌方 · ${stageLabel(ev.wave)}`;
     bump(ev.attackerId ? slots[ev.attackerId] : slots['__hero']);
     if (ev.enemyChanged) renderEnemies(battle.enemyTeam);
   };
   renderEnemies(battle.enemyTeam);
+  // 初始血条也按波次着色（进页即在关底/教主波时立刻可见）
+  setBg(hpFill, isBossWave(startWave) ? '#c8324b' : isEliteWave(startWave) ? '#d97a3c' : '#e05a6f');
   battle.start(onTick);
 
   // —— 常驻功能入口（原首页菜单）——
