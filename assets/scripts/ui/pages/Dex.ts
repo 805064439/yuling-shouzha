@@ -22,7 +22,7 @@ export function buildDex(root: Node, gm: GameManager, tab: DexTab = 'spirit'): v
   const s = gm.state;
 
   const title = makeLabel(root, tab === 'spirit' ? '精怪图鉴' : '蚀灵教图鉴', { fontSize: 40, color: COLORS.text });
-  title.setPosition(0, 645, 0);
+  title.setPosition(0, 600, 0);
 
   // —— 页签切换（当前页签高亮 btnPrimary）——
   const tabs: Array<[string, DexTab]> = [['🟢 精怪', 'spirit'], ['⚔ 蚀灵教', 'enemy']];
@@ -32,7 +32,7 @@ export function buildDex(root: Node, gm: GameManager, tab: DexTab = 'spirit'): v
       w: 200, h: 50, fontSize: 24,
       ...(active ? { bg: COLORS.btnPrimary } : {}),
     });
-    btn.setPosition(-110 + i * 220, 585, 0);
+    btn.setPosition(-110 + i * 220, 540, 0);
   });
 
   let rows: number;

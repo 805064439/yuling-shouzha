@@ -26,14 +26,14 @@ export function buildEnemyDetail(root: Node, gm: GameManager, id: string): void 
   const sub = boss ? '#c98a9a' : '#9a8fb0';
 
   const title = makeLabel(root, e.name, { fontSize: 40, color: accent });
-  title.setPosition(0, 630, 0);
+  title.setPosition(0, 590, 0); // 下移避免大字号标题在 1334 顶边被裁
   makeLabel(root, `蚀灵教 · ${TIER_NAMES[e.tier] ?? '？？？'} · 强度 ×${e.hpMul.toFixed(1)}`, {
     fontSize: 22, color: sub,
-  }).setPosition(0, 588, 0);
+  }).setPosition(0, 552, 0);
 
   // 全屏大立绘（铁律：深底不放裸立绘 → 坐层级冷色纸舞台）
   const stage = makeSpiritStage(root, 400, 560, TIER_STAGE[e.tier] ?? '#5a5468');
-  stage.setPosition(0, 250, 0);
+  stage.setPosition(0, 225, 0);
   makeSpirit(stage, enemyResPath(e.id), 360, '❓', 520).setPosition(0, 0, 0);
 
   // 设定描述（浅条深字，双行）

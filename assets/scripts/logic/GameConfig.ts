@@ -107,7 +107,7 @@ export const RARITY_LABEL: { N: string; R: string; SR: string; SSR: string } = {
 };
 
 // 当前精灵立绘缓存版本：改图后 +1，强制资源重新加载（Cocos 用 resources 动态加载，靠查询参数破缓存）
-export const SPIRIT_VERSION = 29; // 29: 初生立绘统一 640×960 画布 + 小卡片视觉尺寸补偿
+export const SPIRIT_VERSION = 30; // 30: 替换第 5~8 号敌人立绘（墨傀使/执灯长老/血砚先生/教主）
 
 // 全局养成加成重算：idleMult = 等级收益(1 + (level-1)*0.1) + 进化总阶数 * 每阶加成
 export function recalcIdleMult(state: {
