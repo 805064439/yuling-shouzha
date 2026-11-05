@@ -13,6 +13,7 @@ import { buildDex } from './pages/Dex';
 import { buildDetail } from './pages/Detail';
 import { buildBattle } from './pages/Battle';
 import { buildProtagonist } from './pages/Protagonist';
+import { buildEnemyDetail } from './pages/EnemyDetail';
 
 export class GameManager {
   state: GameState;
@@ -55,9 +56,13 @@ export class GameManager {
       case 'team': buildTeam(this.root, this); break;
       case 'gacha': buildGacha(this.root, this); break;
       case 'shop': buildShop(this.root, this); break;
-      case 'dex': buildDex(this.root, this); break;
+      case 'dex': buildDex(this.root, this, param === 'enemy' ? 'enemy' : 'spirit'); break;
       case 'battle': buildBattle(this.root, this); break;
       case 'protagonist': buildProtagonist(this.root, this); break;
+      case 'enemyDetail':
+        if (param) buildEnemyDetail(this.root, this, param);
+        else buildDex(this.root, this, 'enemy');
+        break;
       case 'detail':
         if (param) buildDetail(this.root, this, param);
         else buildDex(this.root, this);
