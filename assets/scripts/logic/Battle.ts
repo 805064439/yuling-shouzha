@@ -1,24 +1,29 @@
 // 自动战斗（挂机战斗，纯数值演算 + 日志回调，无需逐帧精灵动画）
-// 原 src/battle.js 迁移而来。改为 class 封装，UI 层用 Cocos schedule 或 setInterval 驱动 tick。
-// 挂机版：构造后即可 start，敌方为随机 3 只精怪编队，击败后自动刷新下一波。
+// 挂机版：构造后即可 start，敌方为「蚀灵教」编队（分层编排：杂兵/弟子/长老/教主），
+// 击败后 wave+1 自动刷新下一波，血量随阵容强度系数缩放。
 
 import { GAME_CONFIG } from './GameConfig';
-import { SPIRITS, SPIRIT_BY_ID, spiritStats } from './Spirits';
+import { SPIRIT_BY_ID, spiritStats } from './Spirits';
+import { EnemyDef, ENEMIES, ENEMY_BY_ID } from './Enemies';
 import { GameState } from './Save';
 
 export interface BattleEvent {
   ratio: number; // 敌人剩余血量比例 0~1
   attackerId: string | null; // 本次出手精灵 id（用于立绘高亮，纯展示）
   enemyChanged?: boolean; // 敌方编队已刷新（击败旧敌，新敌人登场）
+  wave?: number; // 当前波次
 }
 
-const ENEMY_TEAM_SIZE = 3;
+const byTier = (t: number): EnemyDef[] => ENEMIES.filter((e) => e.tier === t);
+const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 export class Battle {
   private enemyHp = 1;
   private timer: ReturnType<typeof setInterval> | null = null;
-  /** 当前敌方编队（随机 3 只精怪 id，供 UI 展示立绘） */
-  enemyTeam: string[] = [];
+  /** 当前波次（击败一波 +1，用于分层编排敌人） */
+  wave = 1;
+  /** 当前敌方编队（蚀灵教成员，供 UI 展示立绘） */
+  enemyTeam: EnemyDef[] = [];
 
   constructor(
     private state: GameState,
@@ -27,15 +32,31 @@ export class Battle {
     this.enemyTeam = this.rollEnemyTeam();
   }
 
-  // 随机刷一波敌方编队（不放重复的）
-  private rollEnemyTeam(): string[] {
-    const pool = SPIRITS.map((sp) => sp.id);
-    const team: string[] = [];
-    while (team.length < Math.min(ENEMY_TEAM_SIZE, pool.length)) {
-      const id = pool[Math.floor(Math.random() * pool.length)];
-      if (!team.includes(id)) team.push(id);
+  // 随机刷一波敌方编队（蚀灵教分层编排）：
+  //   每 30 波  = 教主 Boss 单挑
+  //   每 10 波  = 1 长老 + 2 外门杂兵
+  //   普通波    = 前期全杂兵，5 波后混入内门弟子
+  private rollEnemyTeam(): EnemyDef[] {
+    const w = this.wave;
+    if (w > 0 && w % 30 === 0) {
+      return [ENEMY_BY_ID['e_lord']];
     }
-    return team;
+    const t1 = byTier(1);
+    const t2 = byTier(2);
+    const t3 = byTier(3);
+    if (w > 0 && w % 10 === 0) {
+      return [pick(t3), pick(t1), pick(t1)];
+    }
+    if (w < 5) {
+      return [pick(t1), pick(t1), pick(t1)];
+    }
+    return [pick(t1), pick(t1), pick(t2)];
+  }
+
+  /** 敌方阵容强度系数：全队 hpMul 均值 */
+  private enemyStrength(): number {
+    if (this.enemyTeam.length === 0) return 1;
+    return this.enemyTeam.reduce((s, e) => s + e.hpMul, 0) / this.enemyTeam.length;
   }
 
   private charBase(): number {
@@ -54,11 +75,11 @@ export class Battle {
     return this.charBase() + this.teamAtk();
   }
 
-  // 敌人血量随「队伍总攻击 + 主角等级」缩放，保证一直有挑战
+  // 敌人血量随「队伍总攻击 + 主角等级」缩放，再乘敌方阵容强度系数（Boss 波更肉）
   private maxHp(): number {
     return Math.max(
       1,
-      Math.floor((GAME_CONFIG.battle.enemyHpBase + this.totalAtk() * 0.5) * this.state.level),
+      Math.floor((GAME_CONFIG.battle.enemyHpBase + this.totalAtk() * 0.5) * this.state.level * this.enemyStrength()),
     );
   }
 
@@ -78,11 +99,15 @@ export class Battle {
       const cores = Math.floor(this.maxHp() * 0.02); // 灵核掉落（进化材料）
       this.state.gold += reward;
       this.state.cores = (this.state.cores || 0) + cores;
-      this.onLog(`击败敌人！获得 ${reward} 灵气 · ${cores} 灵核`);
+      const bossDown = this.enemyTeam.some((e) => e.tier === 4);
+      this.onLog(bossDown
+        ? `击败${this.enemyTeam[0].name}！获得 ${reward} 灵气 · ${cores} 灵核`
+        : `击败敌人！获得 ${reward} 灵气 · ${cores} 灵核`);
+      this.wave += 1;
       this.enemyTeam = this.rollEnemyTeam(); // 下一波敌人登场
       this.enemyHp = this.maxHp();
-      this.onLog(`新的敌人出现了：${this.enemyTeam.map((id) => SPIRIT_BY_ID[id]?.name ?? id).join('、')}`);
-      return { ratio: 1, attackerId, enemyChanged: true };
+      this.onLog(`第 ${this.wave} 波：${this.enemyTeam.map((e) => e.name).join('、')} 出现`);
+      return { ratio: 1, attackerId, enemyChanged: true, wave: this.wave };
     }
     return { ratio: this.enemyHp / this.maxHp(), attackerId };
   }

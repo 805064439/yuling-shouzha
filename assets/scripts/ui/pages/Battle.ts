@@ -6,6 +6,8 @@ import { Node } from 'cc';
 import type { GameManager } from '../GameManager';
 import { Battle, BattleEvent } from '../../logic/Battle';
 import { SPIRIT_BY_ID, spiritResPath } from '../../logic/Spirits';
+import { EnemyDef } from '../../logic/Enemies';
+import { enemyResPath } from '../../logic/Enemies';
 import { RARITY_COLOR } from '../../logic/GameConfig';
 import { makeLabel, makeButton, makePanel, makeSpirit, makeSpiritStage, setSize, setBg, COLORS } from '../widgets';
 
@@ -25,28 +27,37 @@ export function buildBattle(root: Node, gm: GameManager): void {
   );
   info.setPosition(0, 628, 0);
 
-  // —— 敌方编队 ——
+  // —— 敌方编队（蚀灵教）——
   const hpBg = makePanel(root, { w: 620, h: 40, bg: '#3a2030' });
   hpBg.setPosition(0, 566, 0);
   const hpFill = makePanel(hpBg, { w: 620, h: 40, bg: '#e05a6f' });
   hpFill.setPosition(0, 0, 1);
-  makeLabel(hpBg, '敌方', { fontSize: 20, color: '#ffffff' }).setPosition(0, 0, 2);
+  const hpLbl = makeLabel(hpBg, '敌方 · 第 1 波', { fontSize: 20, color: '#ffffff' });
+  hpLbl.setPosition(0, 0, 2);
 
   const enemyRow = new Node('enemyRow');
   root.addChild(enemyRow);
   enemyRow.setPosition(0, 455, 0);
-  const renderEnemies = (ids: string[]): void => {
+  // 蚀灵教分层衬底色：杂兵灰墨 / 弟子浊紫 / 长老与教主暗朱
+  const tierStageColor: Record<number, string> = {
+    1: '#5a5468',
+    2: '#6e4a68',
+    3: '#7a3e50',
+    4: '#8a3050',
+  };
+  const renderEnemies = (team: EnemyDef[]): void => {
     enemyRow.removeAllChildren();
-    const n = ids.length;
+    const n = team.length;
     const gap = ENEMY_SLOT.w + 28;
-    ids.forEach((id, i) => {
-      const sp = SPIRIT_BY_ID[id];
+    team.forEach((e, i) => {
       const x = (i - (n - 1) / 2) * gap;
-      // 铁律：深底不放裸立绘 → 敌方立绘坐暗红衬纸舞台
-      const stage = makeSpiritStage(enemyRow, ENEMY_SLOT.w, ENEMY_SLOT.h, '#a04a5e');
+      // 铁律：深底不放裸立绘 → 敌方立绘坐分层冷色纸舞台
+      const stage = makeSpiritStage(enemyRow, ENEMY_SLOT.w, ENEMY_SLOT.h, tierStageColor[e.tier] ?? '#5a5468');
       stage.setPosition(x, 0, 0);
-      makeSpirit(stage, sp ? spiritResPath(sp, 0) : '', ENEMY_SLOT.pic, sp?.icon ?? '❓', ENEMY_SLOT.picH).setPosition(0, 0, 0);
-      makeLabel(enemyRow, sp?.name ?? '???', { fontSize: 18, color: COLORS.text }).setPosition(x, -ENEMY_SLOT.h / 2 - 14, 0);
+      makeSpirit(stage, enemyResPath(e.id), ENEMY_SLOT.pic, '❓', ENEMY_SLOT.picH).setPosition(0, 0, 0);
+      const tierTag = e.tier >= 4 ? '【教主】' : e.tier === 3 ? '【长老】' : '';
+      makeLabel(enemyRow, tierTag + e.name, { fontSize: e.tier >= 3 ? 19 : 18, color: e.tier >= 3 ? '#e8b0bc' : COLORS.text })
+        .setPosition(x, -ENEMY_SLOT.h / 2 - 14, 0);
     });
   };
   renderEnemies([]);
@@ -124,6 +135,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
     const w = Math.max(0, Math.min(1, ev.ratio)) * 620;
     setSize(hpFill, w, 40);
     setBg(hpFill, '#e05a6f');
+    if (ev.wave) (hpLbl.getComponent('cc.Label') as any).string = `敌方 · 第 ${ev.wave} 波`;
     bump(ev.attackerId ? slots[ev.attackerId] : slots['__hero']);
     if (ev.enemyChanged) renderEnemies(battle.enemyTeam);
   };
