@@ -74,11 +74,11 @@ export function buildBattle(root: Node, gm: GameManager): void {
 
   const team = s.team || [];
 
-  // 主角卡（无主角立绘素材：山茶花 emoji 卡位，椿=山茶）
+  // 主角卡（立绘：spirits/protagonist.png，设定=执笔育灵师·小椿；emoji 仅作加载兜底）
   const [hx, hy] = allyPos(0);
   const heroStage = makeSpiritStage(allyRow, ALLY_SLOT.w, ALLY_SLOT.h, '#7fc9a8');
   heroStage.setPosition(hx, hy, 0);
-  makeLabel(heroStage, '🌸', { fontSize: 64 }).setPosition(0, 6, 0);
+  makeSpirit(heroStage, 'spirits/protagonist', ALLY_SLOT.pic, '🌸', ALLY_SLOT.picH).setPosition(0, 0, 0);
   makeLabel(allyRow, '主角·小椿', { fontSize: 17, color: COLORS.text }).setPosition(hx, hy - ALLY_SLOT.h / 2 - 12, 0);
   slots['__hero'] = heroStage;
 

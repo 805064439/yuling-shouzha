@@ -29,6 +29,11 @@ def key_bg(src, dst, w=640, h=960):
         m = excess > 10
         g = np.where(m, np.maximum(r, g - excess * 0.5), g)
         b = np.where(m, np.maximum(r, b - excess * 0.5), b)
+    elif bg[0] > bg[1] + 60 and bg[2] > bg[1] + 60:  # 品红/紫幕：把溢出的 r/b 压向 g（力度加强，发丝边缘残留多）
+        excess = np.minimum(r, b) - g
+        m = excess > 6
+        r = np.where(m, np.maximum(g, r - excess * 0.8), r)
+        b = np.where(m, np.maximum(g, b - excess * 0.8), b)
     out = np.stack([r, g, b, alpha * 255.0], axis=-1).astype(np.uint8)
     img = Image.fromarray(out, 'RGBA').resize((w, h), Image.LANCZOS)
     # 清理缩放后的低 alpha 噪点，避免边缘白/彩边
