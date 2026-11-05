@@ -127,10 +127,11 @@ export function buildBattle(root: Node, gm: GameManager): void {
     ['🎴 召唤精怪', 'gacha'],
     ['📖 精怪图鉴', 'dex'],
     ['🏪 灵物商店', 'shop'],
+    ['🌸 主角', 'protagonist'],
   ];
   nav.forEach(([label, key], i) => {
-    makeButton(root, label, () => gm.go(key), { w: 166, h: 66, fontSize: 22 })
-      .setPosition(-279 + i * 186, -430, 0);
+    makeButton(root, label, () => gm.go(key), { w: 142, h: 64, fontSize: 20 })
+      .setPosition(-296 + i * 148, -430, 0);
   });
 
   // 离开本页时停止计时器，避免泄漏

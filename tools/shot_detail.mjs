@@ -59,7 +59,11 @@ async function main() {
     if ((await evaluate('!!(window.__ui && window.cc && window.cc.resources)')) === true) break;
   }
   await sleep(2000);
-  if (CARD !== '__battle__') {
+  if (CARD === '__protag__') {
+    // 点战斗页导航里的「主角」按钮进主角页
+    await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='btn'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('主角')){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
+    await sleep(9000);
+  } else if (CARD !== '__battle__') {
     await evaluate(`(()=>{const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('精怪图鉴'))c.emit('click');}}walk(c);}};walk(window.__ui);return 'OK';})()`);
     await sleep(8000);
     await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='panel'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string==='${CARD}'){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);

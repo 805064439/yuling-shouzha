@@ -4,6 +4,7 @@
 import { Node, UITransform } from 'cc';
 import { loadState, saveState, settleOffline } from '../logic/Idle';
 import { GameState } from '../logic/Save';
+import { recalcIdleMult } from '../logic/GameConfig';
 import { makeLabel, makePanel, COLORS, setBg, preloadUiPanels } from './widgets';
 import { buildTeam } from './pages/Team';
 import { buildGacha } from './pages/Gacha';
@@ -11,6 +12,7 @@ import { buildShop } from './pages/Shop';
 import { buildDex } from './pages/Dex';
 import { buildDetail } from './pages/Detail';
 import { buildBattle } from './pages/Battle';
+import { buildProtagonist } from './pages/Protagonist';
 
 export class GameManager {
   state: GameState;
@@ -26,6 +28,7 @@ export class GameManager {
 
   start(): void {
     preloadUiPanels(); // 预载九宫格面板切图，makePanel 即刻可用
+    recalcIdleMult(this.state); // 启动即重算挂机倍率：等级加成不依赖升级动作，旧档也能补算
     // 离线收益结算
     const r = settleOffline(this.state);
     this.save();
@@ -54,6 +57,7 @@ export class GameManager {
       case 'shop': buildShop(this.root, this); break;
       case 'dex': buildDex(this.root, this); break;
       case 'battle': buildBattle(this.root, this); break;
+      case 'protagonist': buildProtagonist(this.root, this); break;
       case 'detail':
         if (param) buildDetail(this.root, this, param);
         else buildDex(this.root, this);
