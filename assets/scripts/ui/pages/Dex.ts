@@ -40,5 +40,5 @@ export function buildDex(root: Node, gm: GameManager): void {
   });
   flowGrid(root, cards, 420, 3, 200, 280, 18);
 
-  makeButton(root, '返回主页', () => gm.go('home'), { w: 300, h: 70 }).setPosition(0, -620, 0);
+  makeButton(root, '返回战斗', () => gm.go('battle'), { w: 300, h: 70 }).setPosition(0, -620, 0);
 }

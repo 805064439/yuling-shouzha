@@ -59,10 +59,12 @@ async function main() {
     if ((await evaluate('!!(window.__ui && window.cc && window.cc.resources)')) === true) break;
   }
   await sleep(2000);
-  await evaluate(`(()=>{const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('精怪图鉴'))c.emit('click');}}walk(c);}};walk(window.__ui);return 'OK';})()`);
-  await sleep(8000);
-  await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='panel'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string==='${CARD}'){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
-  await sleep(12000); // 等大立绘（1-2MB）加载完成
+  if (CARD !== '__battle__') {
+    await evaluate(`(()=>{const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('精怪图鉴'))c.emit('click');}}walk(c);}};walk(window.__ui);return 'OK';})()`);
+    await sleep(8000);
+    await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='panel'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string==='${CARD}'){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
+  }
+  await sleep(CARD === '__battle__' ? 6000 : 12000); // 等大立绘（1-2MB）加载完成
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(OUT, Buffer.from(shot.data, 'base64'));
   console.log('SAVED', OUT);

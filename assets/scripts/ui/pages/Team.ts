@@ -78,7 +78,7 @@ export function buildTeam(root: Node, gm: GameManager): void {
   });
   flowGrid(root, cards, 410, 3, 200, 270, 22);
 
-  makeButton(root, '返回主页', () => gm.go('home'), { w: 300, h: 70 }).setPosition(0, -560, 0);
+  makeButton(root, '返回战斗', () => gm.go('battle'), { w: 300, h: 70 }).setPosition(0, -560, 0);
 }
 
 function toggleTeam(gm: GameManager, id: string): void {

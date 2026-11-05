@@ -68,5 +68,5 @@ export function buildShop(root: Node, gm: GameManager): void {
 
   flowV(root, rows, 460, 12);
 
-  makeButton(root, '返回主页', () => gm.go('home'), { w: 300, h: 70 }).setPosition(0, -600, 0);
+  makeButton(root, '返回战斗', () => gm.go('battle'), { w: 300, h: 70 }).setPosition(0, -600, 0);
 }

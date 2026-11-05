@@ -5,7 +5,6 @@ import { Node, UITransform } from 'cc';
 import { loadState, saveState, settleOffline } from '../logic/Idle';
 import { GameState } from '../logic/Save';
 import { makeLabel, makePanel, COLORS, setBg, preloadUiPanels } from './widgets';
-import { buildHome } from './pages/Home';
 import { buildTeam } from './pages/Team';
 import { buildGacha } from './pages/Gacha';
 import { buildShop } from './pages/Shop';
@@ -16,7 +15,7 @@ import { buildBattle } from './pages/Battle';
 export class GameManager {
   state: GameState;
   root: Node;
-  current = 'home';
+  current = 'battle';
   cleanup: (() => void) | null = null; // 离开当前页前的清理钩子（如停止战斗计时器）
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -30,7 +29,7 @@ export class GameManager {
     // 离线收益结算
     const r = settleOffline(this.state);
     this.save();
-    this.go('home');
+    this.go('battle'); // 挂机游戏：进游戏直接在战斗界面
     if (r.elapsedSec >= 60 && r.gold > 0) {
       const h = Math.floor(r.elapsedSec / 3600);
       const m = Math.floor((r.elapsedSec % 3600) / 60);
@@ -50,7 +49,6 @@ export class GameManager {
     if (!this.root.getComponent(UITransform)) this.root.addComponent(UITransform);
 
     switch (key) {
-      case 'home': buildHome(this.root, this); break;
       case 'team': buildTeam(this.root, this); break;
       case 'gacha': buildGacha(this.root, this); break;
       case 'shop': buildShop(this.root, this); break;
@@ -60,7 +58,7 @@ export class GameManager {
         if (param) buildDetail(this.root, this, param);
         else buildDex(this.root, this);
         break;
-      default: buildHome(this.root, this);
+      default: buildBattle(this.root, this);
     }
     this.fixLayer();
   }

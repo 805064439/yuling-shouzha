@@ -206,7 +206,7 @@ export function makeLabel(parent: Node, text: string, opts: LabelOpts = {}): Nod
     lab.verticalAlign = 1; // 1 = VerticalAlign.CENTER
     if (opts.wrapWidth) {
         lab.enableWrap = true;
-        lab.overflow = 2; // 2 = Overflow.RESIZE_HEIGHT
+        lab.overflow = 3; // 3 = Overflow.RESIZE_HEIGHT（注意：2 是 SHRUNK 会把多行文本缩成一团）
         setSize(n, opts.wrapWidth, fs);
     } else {
         const w = Math.max(text.length * fs * 0.92, 20);
