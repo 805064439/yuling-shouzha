@@ -11,6 +11,7 @@ export interface GameState {
   idleMult: number;
   cores: number; // 灵核（进化材料，战斗掉落）
   wave: number; // 当前战斗波次（难度梯队进度，切页面/重开不回退）
+  bestWave: number; // 历史最高波次（卡关退回时用于展示进度，不随回退下降）
   team: string[]; // 出战队伍（spiritId 数组，最多 GAME_CONFIG.team.size 只）
   prog: Record<string, Prog>; // 每只精灵养成进度
   tickets: number; // 抽卡券
@@ -28,6 +29,7 @@ export function createDefaultState(): GameState {
     idleMult: 1,
     cores: 0,
     wave: 1,
+    bestWave: 1,
     team: [],
     prog: {},
     tickets: 0,

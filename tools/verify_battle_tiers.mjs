@@ -1,4 +1,5 @@
-// 战斗难度梯队端到端验证：种档到指定波次 → 检查血条梯队文案 / 敌方编队人数 / 波次存档。
+// 战斗梯队端到端验证：种档到指定波次 → 检查血条梯队文案 / 敌方编队 / 每单位独立血条数 / 波次存档。
+// 通过 CDP 注入把 1s 战斗计时器冻结成 10 分钟，避免验证期间波次自然推进导致断言抖动。
 // 用法: node tools/verify_battle_tiers.mjs [url]
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -22,7 +23,7 @@ const chrome = spawn(CHROME, [
 process.on('exit', () => { try { chrome.kill(); } catch {} });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const BASE = { gold: 500, tickets: 1, cores: 0, level: 1, team: [], prog: {}, collection: {}, idleMult: 1 };
+const BASE = { gold: 500, tickets: 1, cores: 0, level: 5, team: [], prog: {}, collection: {}, idleMult: 1, bestWave: 110 };
 const CASES = [
   { name: '波10 关底（外门·试炼）', seed: { ...BASE, wave: 10 }, wants: ['第 10 波', '外门·试炼', '【关底】'], enemies: 3 },
   { name: '波30 教主（内门·蚀阵）', seed: { ...BASE, wave: 30 }, wants: ['第 30 波', '内门·蚀阵', '【教主】'], enemies: 1, shot: 'tools/battle_tier_boss.png' },
@@ -59,8 +60,12 @@ async function main() {
   };
   await send('Runtime.enable');
   await send('Page.enable');
+  // 冻结 1s 战斗计时器（Cocos 主循环用 rAF，不受影响）
+  await send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `(function(){const o=window.setInterval;window.setInterval=function(f,ms){return o.call(window,f,ms===1000?600000:ms);};})();`,
+  });
 
-  const collect = `(()=>{let hp='',enemies=0,log='';const walk=(n)=>{if(n.name==='enemyRow'){let c=0;const w2=(m)=>{if(m.name==='spirit')c++;m.children.forEach(w2);};w2(n);enemies=c;}if(n.name==='label'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s.startsWith('敌方 ·'))hp=s;if(s.includes('挂机战斗中')||s.includes('出现')||s.includes('进入'))log=s;}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify({hp,enemies,log});})()`;
+  const collect = `(()=>{let hp='',enemies=0,bars=0,nums=[],info='',progress='';const walk=(n)=>{if(n.name==='enemyRow'){const w2=(m)=>{if(m.name==='spirit')enemies++;m.children.forEach(w2);};n.children.forEach(w2);}if(n.name==='unitHpBar')bars++;if(n.name==='unitHpNum'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s)nums.push(s);}if(n.name==='label'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s.startsWith('敌方 ·'))hp=s;if(s.includes('主角 Lv.'))info=s;if(s.includes('本关击杀'))progress=s;}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify({hp,enemies,bars,nums,info,progress});})()`;
 
   for (const c of CASES) {
     console.log(`\n=== ${c.name} ===`);
@@ -69,45 +74,26 @@ async function main() {
     await evaluate(`localStorage.setItem('ylsz_save', JSON.stringify(${JSON.stringify(c.seed)})); 'SEEDED'`);
     await send('Page.reload');
     for (let i = 0; i < 40; i++) {
-      await sleep(1500);
+      await sleep(1000);
       if ((await evaluate('!!(window.__ui && window.cc && window.cc.resources)')) === true) break;
     }
-    await sleep(1500); // 等立绘加载
+    await sleep(1800); // 等立绘异步加载
     const raw = await evaluate(collect);
     const d = typeof raw === 'string' && raw.startsWith('{') ? JSON.parse(raw) : {};
-    console.log(`  hp="${d.hp}" enemies=${d.enemies} log="${(d.log || '').slice(0, 90)}"`);
+    console.log(`  hp="${d.hp}" enemies=${d.enemies} bars=${d.bars} nums=${(d.nums || []).slice(0, 4).join('|')}`);
     for (const w of c.wants) assert(`血条含「${w}」`, (d.hp || '').includes(w));
     assert(`敌方编队 ${c.enemies} 人`, d.enemies === c.enemies, `实际 ${d.enemies}`);
+    assert(`独立血条 ${c.enemies + 1} 条（${c.enemies} 敌 + 1 主角）`, d.bars === c.enemies + 1, `实际 ${d.bars}`);
+    assert('血条上有血量数字', (d.nums || []).some(s => /\d+\/\d+/.test(s)), JSON.stringify(d.nums));
+    assert('顶部信息与本关进度已渲染', /主角 Lv\./.test(d.info || '') && /本关击杀/.test(d.progress || ''));
     const savedWave = await evaluate(`JSON.parse(localStorage.getItem('ylsz_save')||'{}').wave`);
-    assert('存档波次与种档一致', savedWave === c.seed.wave, `存档 ${savedWave}`);
+    assert('存档波次与种档一致（重开不回退）', savedWave === c.seed.wave, `存档 ${savedWave}`);
     if (c.shot) {
       const shot = await send('Page.captureScreenshot', { format: 'png' });
       fs.writeFileSync(c.shot, Buffer.from(shot.data, 'base64'));
       console.log(`  SAVED ${c.shot}`);
     }
   }
-
-  // —— 波次推进 + 持久化 ——
-  console.log('\n=== 波次推进与存档 ===');
-  const fast = { ...BASE, wave: 1, team: ['shou', 'lu3'],
-    prog: { shou: { star: 1, evo: 2 }, lu3: { star: 1, evo: 2 } },
-    collection: { shou: 1, lu3: 1 } };
-  await send('Page.navigate', { url: TARGET });
-  await sleep(7000);
-  await evaluate(`localStorage.setItem('ylsz_save', JSON.stringify(${JSON.stringify(fast)})); 'SEEDED'`);
-  await send('Page.reload');
-  for (let i = 0; i < 40; i++) {
-    await sleep(1500);
-    if ((await evaluate('!!(window.__ui && window.cc && window.cc.resources)')) === true) break;
-  }
-  await sleep(9000); // 强队伍 1 tick 一波，足够推过若干波
-  const waveInSave = await evaluate(`JSON.parse(localStorage.getItem('ylsz_save')||'{}').wave`);
-  const raw2 = await evaluate(collect);
-  const d2 = typeof raw2 === 'string' && raw2.startsWith('{') ? JSON.parse(raw2) : {};
-  console.log(`  存档 wave=${waveInSave}，血条="${d2.hp}"`);
-  assert('战斗自动推波（wave > 1）', Number(waveInSave) > 1, `${waveInSave}`);
-  assert('血条波次与存档一致', (d2.hp || '').includes(`第 ${waveInSave} 波`));
-  assert('波次写入存档（切页/重开不回退）', Number(waveInSave) === Number((d2.hp || '').match(/第 (\d+) 波/)?.[1]));
 
   console.log(`\n=== 结果: ${pass} 通过, ${fail} 失败 ===`);
   ws.close();

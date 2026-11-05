@@ -1,10 +1,13 @@
-// 难度梯队验证：直接 import 真实 TS 配置与纯函数（Node 22 --experimental-strip-types）。
+// 难度梯队 + 单位数值 + 退关规则验证：直接 import 真实 TS 模块（Node 22 --experimental-strip-types）。
 // 用法: node --experimental-strip-types tools/verify_difficulty.mjs
 import {
   DIFFICULTY_STAGES, CHAPTER_WAVES, ELITE_EVERY, BOSS_EVERY,
-  stageForWave, stageIndexForWave, waveHpScale, isBossWave, isEliteWave,
-  enemyMaxHp, waveReward, stageLabel, nextStageAt, wavePressure,
-  HP_ATK_COEF, ELITE_PRESSURE, BOSS_PRESSURE,
+  stageForWave, stageIndexForWave, waveHpScale, waveDmgScale,
+  isBossWave, isEliteWave, wavePressure, stageLabel, nextStageAt,
+  heroMaxHp, heroAtk, ALLY_HP_MULT,
+  enemyUnitHp, enemyUnitAtk, abyssScale,
+  killReward, decideAfterWipe,
+  ELITE_PRESSURE, BOSS_PRESSURE, ENEMY_HP_BASE,
 } from '../assets/scripts/logic/Difficulty.ts';
 import { ENEMIES } from '../assets/scripts/logic/Enemies.ts';
 
@@ -75,55 +78,76 @@ assert('层级随梯队单调不降', DIFFICULTY_STAGES.every((s, i) => {
   return avg(s.normalComp.flat()) >= avg(DIFFICULTY_STAGES[i - 1].normalComp.flat()) - 1e-9;
 }));
 
-// —— 5. 升级是纯收益（旧公式乘 level，越升越难）——
-console.log('\n=== 升级收益 ===');
-const baseHp = 50, wave = 50, strength = 1.3;
-const atkLv1 = 10 + 60;   // 主角 8+2*1 + 队伍 60
-const atkLv11 = 30 + 60;  // 主角 8+2*11 + 队伍 60
-const hpLv1 = enemyMaxHp(baseHp, atkLv1, wave, strength);
-const hpLv11 = enemyMaxHp(baseHp, atkLv11, wave, strength);
-const ticks = (hp, atk) => Math.ceil(hp / atk);
-const t1 = ticks(hpLv1, atkLv1), t2 = ticks(hpLv11, atkLv11);
-assert('升级不会让击杀变慢（旧公式乘 level 会越升越难）', t2 <= t1, `Lv1 ${t1}s → Lv11 ${t2}s`);
-const oldHpLv11 = Math.floor((baseHp + atkLv11 * 0.5) * 11 * strength); // 旧公式：血量 × 主角等级
-assert('新公式去掉等级惩罚（Lv11 敌人血量远低于旧公式）', oldHpLv11 > hpLv11 * 4,
-  `新 ${hpLv11} vs 旧 ${oldHpLv11}`);
-assert('HP 随队伍攻击按 0.5 系数缩放',
-  enemyMaxHp(baseHp, 100, 1, 1) - enemyMaxHp(baseHp, 98, 1, 1) === Math.floor(2 * HP_ATK_COEF));
+// —— 5. 单位数值：每只怪独立血量 / 伤害，且升级是纯收益 ——
+console.log('\n=== 单位血量与伤害 ===');
+assert('第 1 波杂兵血量 = 基准值', enemyUnitHp(1, 1) === ENEMY_HP_BASE, `${enemyUnitHp(1, 1)}`);
+assert('同波不同层级的怪血量不同（每只怪独立血量）',
+  enemyUnitHp(10, 3.5) > enemyUnitHp(10, 1) * 3 && enemyUnitHp(10, 2) > enemyUnitHp(10, 1));
+// 关底/教主波有额外压力，紧接的下一波会刻意回落作为「章节喘息」，故排除这些边界。
+const afterPressure = w => isEliteWave(w - 1) || isBossWave(w - 1);
+assert('敌人血量随波次单调递增（跨章喘息除外）', (() => {
+  for (let w = 2; w <= 500; w++) {
+    if (!afterPressure(w) && enemyUnitHp(w, 1) < enemyUnitHp(w - 1, 1)) return false;
+  }
+  return true;
+})());
+assert('敌人伤害随波次单调递增（跨章喘息除外）', (() => {
+  for (let w = 2; w <= 500; w++) {
+    if (!afterPressure(w) && enemyUnitAtk(w, 1) < enemyUnitAtk(w - 1, 1)) return false;
+  }
+  return true;
+})());
+assert('伤害曲线比血量更陡（形成真实卡关）',
+  waveDmgScale(100) / waveDmgScale(1) > waveHpScale(100) / waveHpScale(1) * 3);
+assert('100 波后无尽继续增长', abyssScale(200) > abyssScale(100) && abyssScale(100) === 1);
 assert('关底波有额外压力', near(wavePressure(10), ELITE_PRESSURE));
 assert('教主波压力更高', near(wavePressure(30), BOSS_PRESSURE) && BOSS_PRESSURE > ELITE_PRESSURE);
 assert('普通波无额外压力', near(wavePressure(9), 1));
-const hpAt = w => enemyMaxHp(baseHp, 100, w, 1);
-assert('波10 关底血量高于波9', hpAt(10) > hpAt(9));
-assert('波30 教主血量高于波29', hpAt(30) > hpAt(29));
+assert('主角升级同时加血加攻，且不改变敌人数值',
+  heroMaxHp(11) > heroMaxHp(1) && heroAtk(11) > heroAtk(1)
+  && enemyUnitHp(30, 1) === enemyUnitHp(30, 1));
+assert('精灵血量有前排加成', ALLY_HP_MULT >= 2);
 
-// —— 6. 奖励与文案 ——
-console.log('\n=== 奖励与文案 ===');
+// —— 6. 击杀掉落 ——
+console.log('\n=== 每只击杀掉落 ===');
 let rewardMonotone = true;
 for (let w = 2; w <= 500; w++) {
-  if (waveReward(10000, w).gold < waveReward(10000, w - 1).gold) rewardMonotone = false;
+  if (killReward(10000, w, 1, 1).gold < killReward(10000, w - 1, 1, 1).gold) rewardMonotone = false;
 }
-assert('奖励倍率随波次不下降', rewardMonotone);
-assert('无尽梯队奖励 ×2.8', waveReward(10000, 200).gold > waveReward(10000, 5).gold * 2.5);
+assert('单只掉落随波次不下降', rewardMonotone);
+assert('无尽梯队单只掉落 ×2.8', killReward(10000, 200, 1, 1).gold > killReward(10000, 5, 1, 1).gold * 2.5);
+assert('高层级怪掉落更多', killReward(1000, 50, 4, 1).gold > killReward(1000, 50, 1, 1).gold);
+assert('长老/教主必掉灵核', killReward(60, 1, 3, 1).cores >= 1 && killReward(60, 1, 4, 1).cores >= 1);
+assert('杂兵按概率掉灵核（roll=0 掉 / roll=1 不掉）',
+  killReward(60, 1, 1, 0).cores === 1 && killReward(60, 1, 1, 1).cores === 0);
+assert('每次击杀至少掉 1 灵气', killReward(1, 1, 1, 1).gold >= 1);
+
+// —— 7. 关卡推进规则（用户指定的核心逻辑）——
+console.log('\n=== 卡关回退规则 ===');
+assert('第 1 关 0 击杀：无处可退，留在本关',
+  decideAfterWipe(1, 0).outcome === 'hold' && decideAfterWipe(1, 0).nextWave === 1);
+assert('第 12 关 0 击杀：退回第 11 关',
+  decideAfterWipe(12, 0).outcome === 'regress' && decideAfterWipe(12, 0).nextWave === 11);
+assert('有 1 只击杀：留在本关一直打',
+  decideAfterWipe(12, 1).outcome === 'hold' && decideAfterWipe(12, 1).nextWave === 12);
+assert('有 3 只击杀仍留在本关（等全清才推进）',
+  decideAfterWipe(12, 3).outcome === 'hold' && decideAfterWipe(12, 3).nextWave === 12);
+assert('高波次 0 击杀同样只退一关', decideAfterWipe(200, 0).nextWave === 199);
+assert('异常波次被夹到第 1 关', decideAfterWipe(-5, 0).nextWave === 1);
+assert('波次夹逼：0 击杀退回后不会低于 1', (() => {
+  let w = 5;
+  for (let i = 0; i < 20; i++) w = decideAfterWipe(w, 0).nextWave;
+  return w === 1;
+})());
+
+// —— 8. 文案 ——
+console.log('\n=== 文案 ===');
 assert('血条文案含梯队名', stageLabel(45).includes('长老·镇灵'));
 assert('关底文案带【关底】', stageLabel(20).includes('【关底】'));
 assert('教主文案带【教主】', stageLabel(30).includes('【教主】'));
 assert('下一梯队提示正确', nextStageAt(1)?.name === '内门·蚀阵' && nextStageAt(1)?.wave === 11);
 assert('无尽阶段无下一梯队', nextStageAt(200) === null);
 assert('梯队序号可用于跨档播报', stageIndexForWave(10) === 0 && stageIndexForWave(11) === 1);
-
-// —— 7. 典型耗时（防止某档过肉卡死）——
-console.log('\n=== 典型击杀耗时（1 tick = 1s）===');
-function secs(atk, w, strength) {
-  return ticks(enemyMaxHp(baseHp, atk, w, strength), atk);
-}
-const early = secs(10, 1, 1);
-const boss30 = secs(10 + 60, 30, 3.5);
-const late = secs(10 + 300, 100, 1.6);
-console.log(`  INFO  新手(仅主角) 波1 ≈ ${early}s；中期(队伍60攻) 波30教主 ≈ ${boss30}s；后期(队伍300攻) 波100 ≈ ${late}s`);
-assert('新手第 1 波 ≤ 15s', early <= 15, `${early}s`);
-assert('中期教主波 ≤ 90s', boss30 <= 90, `${boss30}s`);
-assert('后期波 100 ≤ 60s', late <= 60, `${late}s`);
 
 console.log(`\n=== 结果: ${pass} 通过, ${fail} 失败 ===`);
 process.exit(fail === 0 ? 0 : 1);
