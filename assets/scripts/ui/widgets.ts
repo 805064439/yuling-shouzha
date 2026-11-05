@@ -509,6 +509,50 @@ export function loadSpiritFrame(path: string): Promise<SpriteFrame | null> {
     });
 }
 
+// ─────────────────────────────────────────────────────────────
+// 初生立绘「视觉尺寸」补偿
+//   初生图归一化后画布统一 640×960，但角色本身有宽扁/瘦高之分，
+//   主体高度仍从 0.55H 到 0.95H 不等；小卡片里宽扁角色会显得偏小。
+//   下面按 alpha>16 主体包围盒算一个额外缩放，让主体的显示面积趋近统一。
+//   数据由 tools/normalize_initials.py 生成；未登记（觉醒/真灵/敌人/主角）返回 1。
+// ─────────────────────────────────────────────────────────────
+const SPIRIT_CANVAS_W = 640;
+const SPIRIT_CANVAS_H = 960;
+const INITIAL_BBOX: Record<string, [number, number]> = {
+  cao:    [614, 718],  // 0.75H
+  lu:     [617, 655],  // 0.68H
+  ye:     [588, 915],  // 0.95H
+  hua:    [615, 664],  // 0.69H
+  rong:   [615, 532],  // 0.55H（最宽扁，补偿最大）
+  ying:   [615, 710],  // 0.74H
+  tai:    [615, 627],  // 0.65H
+  luling: [615, 699],  // 0.73H
+  shou:   [617, 813],  // 0.85H
+  lu3:    [561, 913],  // 0.95H
+};
+
+/**
+ * 小卡片立绘的视觉尺寸补偿系数（1.00 ~ 1.25）。
+ * 按外框 contain 后的主体显示面积，向「外框短边² × 0.60」的目标面积靠拢；
+ * 只放大不缩小（进化形态本来就更大），并限制在 1.25 以内避免溢出卡片。
+ */
+export function spiritFitScale(resPath: string, frameW: number, frameH: number): number {
+  const id = resPath.split('/').pop() || '';
+  const box = INITIAL_BBOX[id];
+  if (!box) return 1;
+  const ratio = SPIRIT_CANVAS_W / SPIRIT_CANVAS_H;
+  let pw = frameW;
+  let ph = frameH;
+  if (pw / ph > ratio) pw = ph * ratio;
+  else ph = pw / ratio;
+  const sw = (pw * box[0]) / SPIRIT_CANVAS_W;
+  const sh = (ph * box[1]) / SPIRIT_CANVAS_H;
+  const area = Math.max(sw * sh, 1);
+  const short = Math.min(frameW, frameH);
+  const target = short * short * 0.60;
+  return Math.max(1, Math.min(1.25, Math.sqrt(target / area)));
+}
+
 // 立绘节点：外框恒定 size×size（保证网格/卡片布局整齐），内部 pic 子节点按原图
 // 宽高比 contain 等比缩放（立绘多为 2:3 竖版，若直接缩放外框会导致同排卡片大小不一）。
 // 加载失败时按 UI_DEBUG.emojiFallback 决定是否显示 emoji 兜底。
@@ -518,6 +562,7 @@ export function makeSpirit(
     size: number,
     fallbackEmoji: string,
     frameH?: number, // 可选外框高度：详情页等需要竖向大图时用（外框仍恒定，布局用）
+    fitScale = 1,    // 可选视觉尺寸补偿：小卡片里让宽扁角色与其他角色看起来一样大
 ): Node {
     const n = newNode('spirit', parent);
     const H = frameH && frameH > 0 ? frameH : size;
@@ -542,7 +587,8 @@ export function makeSpirit(
             w = size;       // 外框比图更"瘦"：以宽度为准，高 = 宽 / 比例
             h = size / ratio;
         }
-        setSize(pic, Math.round(w), Math.round(h));
+        // fitScale 只放大图片本身，外框 size×H 不变：网格/卡片布局完全不受影响
+        setSize(pic, Math.round(w * fitScale), Math.round(h * fitScale));
         let sp = pic.getComponent(Sprite);
         if (!sp) sp = pic.addComponent(Sprite);
         // sizeMode 用 CUSTOM(0)：按节点 UITransform 的 contentSize 缩放（web-mobile 构建不导出该枚举）

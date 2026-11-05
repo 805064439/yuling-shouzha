@@ -7,7 +7,7 @@ import type { GameManager } from '../GameManager';
 import { SPIRITS, spiritStats, spiritResPath } from '../../logic/Spirits';
 import { RARITY_COLOR, EVOLUTION } from '../../logic/GameConfig';
 import { ENEMIES, enemyResPath, TIER_NAMES } from '../../logic/Enemies';
-import { makeLabel, makeButton, makePanel, makeSpirit, flowGrid, attachClick, shadeHex, COLORS } from '../widgets';
+import { makeLabel, makeButton, makePanel, makeSpirit, spiritFitScale, flowGrid, attachClick, shadeHex, COLORS } from '../widgets';
 
 export type DexTab = 'spirit' | 'enemy';
 
@@ -59,7 +59,8 @@ function buildSpiritCards(root: Node, gm: GameManager): number {
       ? { w: CELL_W, h: CELL_H, surface: 'paper' }
       : { w: CELL_W, h: CELL_H, bg: COLORS.panelDeep });
     const prog = s.prog[sp.id] || { star: 1, evo: 0 };
-    makeSpirit(card, spiritResPath(sp, prog.evo), 135, owned ? sp.icon : '❔').setPosition(0, 50, 0);
+    const resPath = spiritResPath(sp, prog.evo);
+    makeSpirit(card, resPath, 135, owned ? sp.icon : '❔', undefined, spiritFitScale(resPath, 135, 135)).setPosition(0, 50, 0);
     makeLabel(card, owned ? sp.name : '？？？', { fontSize: 21, color: owned ? shadeHex(RARITY_COLOR[sp.rarity], -0.35) : '#8C8270' }).setPosition(0, -50, 0);
     if (owned) {
       makeLabel(card, `${EVOLUTION.stages[prog.evo]} ★${prog.star}`, { fontSize: 16, color: COLORS.ink }).setPosition(0, -78, 0);

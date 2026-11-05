@@ -10,6 +10,7 @@ import {
   makeButton,
   makePanel,
   makeSpirit,
+  spiritFitScale,
   flowGrid,
   attachClick,
   setLine,
@@ -26,14 +27,14 @@ export function buildTeam(root: Node, gm: GameManager): void {
     fontSize: 40,
     color: COLORS.text,
   });
-  title.setPosition(0, 600, 0);
+  title.setPosition(0, 620, 0);
 
   const hint = makeLabel(root, `点击精灵加入/移出队伍，最多上阵 ${size} 只`, {
     fontSize: 22,
     color: COLORS.sub,
     wrapWidth: 640,
   });
-  hint.setPosition(0, 545, 0);
+  hint.setPosition(0, 570, 0); // 上移，避免被第一排卡片压住
 
   const owned = SPIRITS.filter((x) => (s.collection[x.id] || 0) > 0);
   if (owned.length === 0) {
@@ -57,7 +58,9 @@ export function buildTeam(root: Node, gm: GameManager): void {
     // 纸面卡片（内容载体）；上阵高亮 = 金描边（不做深色异类卡，保持纸面统一）
     const card = makePanel(root, { w: 200, h: 270, surface: 'paper' });
     if (inTeam) setLine(card, COLORS.btnPrimary);
-    const spr = makeSpirit(card, spiritResPath(sp, prog.evo), 150, sp.icon);
+    const resPath = spiritResPath(sp, prog.evo);
+    // 初生形态按主体包围盒补偿视觉尺寸（觉醒/真灵未登记，自动返回 1）
+    const spr = makeSpirit(card, resPath, 150, sp.icon, undefined, spiritFitScale(resPath, 150, 150));
     spr.setPosition(0, 55, 0);
     // 纸面文字用深色系：稀有度色压暗保证对比（README §4 色板锚点）
     makeLabel(card, sp.name, { fontSize: 24, color: shadeHex(RARITY_COLOR[sp.rarity], -0.35) }).setPosition(0, -55, 0);
@@ -76,9 +79,14 @@ export function buildTeam(root: Node, gm: GameManager): void {
     attachClick(card, () => toggleTeam(gm, sp.id));
     return card;
   });
-  flowGrid(root, cards, 410, 3, 200, 270, 22);
+  // 4 排（集齐 10 只）时收紧行距，返回按钮随末排自适应，避免压住卡片
+  const rows = Math.ceil(cards.length / 3);
+  const gap = rows >= 4 ? 8 : 22;
+  flowGrid(root, cards, 410, 3, 200, 270, gap);
+  const lastBottom = 410 - (rows - 1) * (270 + gap) - 270 / 2;
+  const backY = Math.min(-560, lastBottom - 52);
 
-  makeButton(root, '返回战斗', () => gm.go('battle'), { w: 300, h: 70 }).setPosition(0, -560, 0);
+  makeButton(root, '返回战斗', () => gm.go('battle'), { w: 300, h: 70 }).setPosition(0, backY, 0);
 }
 
 function toggleTeam(gm: GameManager, id: string): void {
