@@ -10,9 +10,8 @@ import { RARITY_COLOR } from '../../logic/GameConfig';
 import { makeLabel, makeButton, makePanel, makeSpirit, makeSpiritStage, setSize, setBg, COLORS } from '../widgets';
 
 const ENEMY_SLOT = { w: 160, h: 175, pic: 148, picH: 158 }; // 敌方立绘槽（3 只）
-const ALLY_SLOT = { w: 180, h: 205, pic: 165, picH: 182 }; // 我方立绘槽（主角 + 最多 5 只，两行三列）
+const ALLY_SLOT = { w: 180, h: 205, pic: 165, picH: 182 }; // 我方立绘槽（≥4 人两行网格时使用；≤3 人自适应放大）
 const ALLY_ROW_Y = [235, 5]; // 我方两行的纵坐标
-const ALLY_GAP = ALLY_SLOT.w + 16;
 
 export function buildBattle(root: Node, gm: GameManager): void {
   root.removeAllChildren();
@@ -52,7 +51,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
   };
   renderEnemies([]);
 
-  // —— 我方编队 + 主角（两行三列，立绘尽量大）——
+  // —— 我方编队 + 主角（数量自适应：少则居中放大，多则两行网格，每行按实际人数居中）——
   makeLabel(root, '我方', { fontSize: 20, color: COLORS.sub }).setPosition(-320, 345, 0);
   const allyRow = new Node('allyRow');
   root.addChild(allyRow);
@@ -65,36 +64,46 @@ export function buildBattle(root: Node, gm: GameManager): void {
     setTimeout(() => { if (n.isValid) n.setScale(1, 1, 1); }, 380);
   };
 
-  // 槽位序号 → (x, y)：主角占 0 号，编队依次排 1..5，每行 3 个
-  const allyPos = (idx: number): [number, number] => {
-    const row = Math.floor(idx / 3);
-    const col = idx % 3;
-    return [(col - 1) * ALLY_GAP, ALLY_ROW_Y[row]];
-  };
-
   const team = s.team || [];
+  const count = team.length + 1; // 主角 + 编队
+  // 槽位尺寸随人数缩放：人越少格越大越清楚
+  const SLOT = count === 1
+    ? { w: 300, h: 330, pic: 280, picH: 305 }
+    : count === 2
+      ? { w: 250, h: 270, pic: 230, picH: 250 }
+      : count === 3
+        ? { w: 210, h: 230, pic: 190, picH: 210 }
+        : ALLY_SLOT; // 4 人以上两行网格，保持 180×205（两行高度已顶满可用空间）
+  const singleRow = count <= 3;
+  const perRow = singleRow ? count : Math.ceil(count / 2);
+  const rowYs = singleRow ? [110] : ALLY_ROW_Y;
+  const rowCounts = singleRow ? [count] : [perRow, count - perRow];
+  const gapX = SLOT.w + 20;
+
+  // 槽位序号 → (x, y)：主角占 0 号，编队依次排 1..5
+  const allyPos = (idx: number): [number, number] => {
+    const r = Math.min(Math.floor(idx / perRow), rowYs.length - 1);
+    const c = idx - r * perRow;
+    return [(c - (rowCounts[r] - 1) / 2) * gapX, rowYs[r]];
+  };
 
   // 主角卡（立绘：spirits/protagonist.png，设定=执笔育灵师·小椿；emoji 仅作加载兜底）
   const [hx, hy] = allyPos(0);
-  const heroStage = makeSpiritStage(allyRow, ALLY_SLOT.w, ALLY_SLOT.h, '#7fc9a8');
+  const heroStage = makeSpiritStage(allyRow, SLOT.w, SLOT.h, '#7fc9a8');
   heroStage.setPosition(hx, hy, 0);
-  makeSpirit(heroStage, 'spirits/protagonist', ALLY_SLOT.pic, '🌸', ALLY_SLOT.picH).setPosition(0, 0, 0);
-  makeLabel(allyRow, '主角·小椿', { fontSize: 17, color: COLORS.text }).setPosition(hx, hy - ALLY_SLOT.h / 2 - 12, 0);
+  makeSpirit(heroStage, 'spirits/protagonist', SLOT.pic, '🌸', SLOT.picH).setPosition(0, 0, 0);
+  makeLabel(allyRow, '主角·小椿', { fontSize: 17, color: COLORS.text }).setPosition(hx, hy - SLOT.h / 2 - 12, 0);
   slots['__hero'] = heroStage;
 
   team.forEach((id, i) => {
     const sp = SPIRIT_BY_ID[id];
     const [x, y] = allyPos(i + 1);
-    const stage = makeSpiritStage(allyRow, ALLY_SLOT.w, ALLY_SLOT.h, sp ? (RARITY_COLOR[sp.rarity] ?? '#888888') : '#888888');
+    const stage = makeSpiritStage(allyRow, SLOT.w, SLOT.h, sp ? (RARITY_COLOR[sp.rarity] ?? '#888888') : '#888888');
     stage.setPosition(x, y, 0);
-    makeSpirit(stage, sp ? spiritResPath(sp, s.prog?.[id]?.evo ?? 0) : '', ALLY_SLOT.pic, sp?.icon ?? '❓', ALLY_SLOT.picH).setPosition(0, 0, 0);
-    makeLabel(allyRow, sp?.name ?? '???', { fontSize: 17, color: COLORS.text }).setPosition(x, y - ALLY_SLOT.h / 2 - 12, 0);
+    makeSpirit(stage, sp ? spiritResPath(sp, s.prog?.[id]?.evo ?? 0) : '', SLOT.pic, sp?.icon ?? '❓', SLOT.picH).setPosition(0, 0, 0);
+    makeLabel(allyRow, sp?.name ?? '???', { fontSize: 17, color: COLORS.text }).setPosition(x, y - SLOT.h / 2 - 12, 0);
     slots[id] = stage;
   });
-
-  if (team.length === 0) {
-    makeLabel(root, '尚未上阵精灵，主角独自挂机中…', { fontSize: 22, color: COLORS.sub }).setPosition(0, 120, 0);
-  }
 
   // —— 战斗日志 ——
   const logPanel = makePanel(root, { w: 660, h: 175, bg: COLORS.panel });
