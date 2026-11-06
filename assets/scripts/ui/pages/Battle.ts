@@ -5,7 +5,7 @@
 // 视觉层 = 主页 UI 切图包 v1（暮色灵墨）：状态条/波次徽章/血条/金线/导航条均为切图，
 // 白色填充图运行时染色；布局坐标按《主页UI切图包-v1/README.md》§1 坐标表。
 
-import { Node } from 'cc';
+import { Node, UITransform } from 'cc';
 import type { GameManager } from '../GameManager';
 import { Battle } from '../../logic/Battle';
 import type { BattleEvent, Unit } from '../../logic/Battle';
@@ -233,12 +233,19 @@ export function buildBattle(root: Node, gm: GameManager): void {
     slots[id] = stage;
   });
 
-  // —— 战斗日志（墨面面板 + 金线）——
+  // —— 战斗日志（墨面面板 + 金线收在面板顶内侧，文字从金线下方起排）——
+  // 文本节点顶锚（anchorY=1）+ SHRINK：多行文字只向下生长且超行自动缩字号，
+  // 彻底避免「金线横穿文字 / 文字溢出面板顶」。
   const logPanel = makePanel(root, { w: 660, h: 175, bg: COLORS.panel });
-  logPanel.setPosition(0, -318, 0);
-  makeUiSprite(logPanel, 'ui_divider_gold', 620, 4, COLORS.gold).setPosition(0, 78, 1);
-  const logLabel = makeLabel(logPanel, `${tierLabel(startWave)} · 挂机战斗中…`, { fontSize: 20, color: COLORS.sub, wrapWidth: 620 });
-  logLabel.setPosition(0, -6, 0);
+  logPanel.setPosition(0, -305, 0);
+  makeUiSprite(logPanel, 'ui_divider_gold', 620, 4, COLORS.gold).setPosition(0, 76, 1);
+  const logLabel = makeLabel(logPanel, `${tierLabel(startWave)} · 挂机战斗中…`, { fontSize: 18, color: COLORS.sub, wrapWidth: 620 });
+  const logLab = logLabel.getComponent('cc.Label') as any;
+  logLab.overflow = 2; // 2 = Overflow.SHRINK（web-mobile 构建不导出枚举，用数值）
+  logLab.lineHeight = 27;
+  setSize(logLabel, 620, 128);
+  (logLabel.getComponent(UITransform) as any).anchorY = 1;
+  logLabel.setPosition(0, 54, 1);
   logSink = (msg: string) => {
     const cur = (logLabel.getComponent('cc.Label') as any).string || '';
     const lines = cur.split('\n').filter(Boolean);
@@ -260,7 +267,9 @@ export function buildBattle(root: Node, gm: GameManager): void {
 
   const onTick = (ev: BattleEvent) => {
     // 顶部总血条（左对齐缩短）+ 关底/教主三态染色
-    const w = Math.max(1, Math.min(1, ev.ratio)) * 620;
+    // 注意：比例钳制必须先于宽度放大——Math.max(1, ratio) 会让血条永远满格
+    const ratio = Math.max(0, Math.min(1, ev.ratio));
+    const w = Math.max(1, ratio * 620);
     setSize(hpFill, w, 40);
     hpFill.setPosition((w - 620) / 2, 0, 1);
     const curWave = ev.wave ?? battle.wave;

@@ -184,9 +184,9 @@ export class Battle {
     if (this.onSave) this.onSave();
     ev.result = 'clear';
     ev.enemyChanged = true;
-    lines.push(`✅ 第 ${cleared} 关通关！推进 ${stageLabel(this.wave)}`);
+    lines.push(`◆ 第 ${cleared} 关通关！推进 ${stageLabel(this.wave)}`);
     if (stageIndexForWave(this.wave) !== prevStage) {
-      lines.push(`⚔ 进入「${stageForWave(this.wave).name}」，敌人更强了`);
+      lines.push(`◆ 进入「${stageForWave(this.wave).name}」，敌人更强了`);
     }
     lines.push(`${stageLabel(this.wave)}：${this.enemyTeam.map((e) => e.name).join('、')} 出现`);
   }
@@ -203,13 +203,13 @@ export class Battle {
     if (d.outcome === 'regress') {
       ev.result = 'regress';
       ev.regressFrom = before;
-      lines.push(`⚠ 一只怪也打不过，退回 ${stageLabel(this.wave)} 修炼`);
+      lines.push(`◆ 一只怪也打不过，退回 ${stageLabel(this.wave)} 修炼`);
       this.kills = 0;
       this.respawn(); // 换关：新敌人 + 双方满血
       ev.enemyChanged = true;
     } else {
       ev.result = 'retry';
-      lines.push(`⚠ 全员倒下，本关已击杀 ${this.kills} 只，原地再战 ${stageLabel(this.wave)}`);
+      lines.push(`◆ 全员倒下，本关已击杀 ${this.kills} 只，原地再战 ${stageLabel(this.wave)}`);
       // 留关：不清击杀数、不复活怪，只让我方满血复活继续打
       this.reviveAllies();
       ev.enemyChanged = false;
@@ -244,7 +244,7 @@ export class Battle {
         const r = killReward(target.maxHp, this.wave, target.def ? target.def.tier : 1, this.rng());
         this.state.gold += r.gold;
         this.state.cores = (this.state.cores || 0) + r.cores;
-        lines.push(`✦ 击杀 ${target.name}！+${r.gold} 灵气${r.cores ? ` · +${r.cores} 灵核` : ''}`);
+        lines.push(`◆ 击杀 ${target.name}！+${r.gold} 灵气${r.cores ? ` · +${r.cores} 灵核` : ''}`);
         if (this.onSave) this.onSave(); // 每只击杀即时落盘
       }
     }

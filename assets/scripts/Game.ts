@@ -8,6 +8,10 @@ import { GAME_CONFIG } from './logic/GameConfig';
 
 let booted = false;
 
+// 调试浮层开关：正式构建必须 false（绿色等宽字会盖住状态栏左侧）。
+// 远端排查时临时改 true，会显示 boot 状态与点击坐标。
+const SHOW_DEBUG_OVERLAY = false;
+
 // 调试浮层：在页面上显示运行时状态/报错/点击计数，便于远端定位（手机端也能直接看到）。
 function ensureDiag(): HTMLElement {
   let el = document.getElementById('__diag') as HTMLElement | null;
@@ -70,11 +74,11 @@ function tryBoot(): void {
   // 调试句柄：便于运行时/远端通过 window.__ui 检查节点树（层级、坐标、尺寸）。
   (globalThis as any).__ui = root;
 
-  installTapProbe();
+  if (SHOW_DEBUG_OVERLAY) installTapProbe();
   try {
     const gm = new GameManager(root);
     gm.start();
-    diag('booted · page=' + gm.current);
+    if (SHOW_DEBUG_OVERLAY) diag('booted · page=' + gm.current);
   } catch (err) {
     diag('BOOT ERROR: ' + (err && (err as Error).stack ? (err as Error).stack : String(err)));
     console.error(err);
