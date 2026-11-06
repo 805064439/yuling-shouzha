@@ -182,7 +182,6 @@ export function buildBattle(root: Node, gm: GameManager): void {
 
   // —— 我方编队 + 主角（数量自适应：少则居中放大，多则两行网格）——
   // 小节标题样式：金色、上移避开敌方名签带（敌名 y≈228）
-  makeLabel(root, '我方', { fontSize: 16, color: COLORS.gold }).setPosition(-320, 248, 0);
   const allyRow = new Node('allyRow');
   root.addChild(allyRow);
   allyRow.setPosition(0, 0, 0);
@@ -205,9 +204,15 @@ export function buildBattle(root: Node, gm: GameManager): void {
         : ALLY_SLOT;
   const singleRow = count <= 3;
   const perRow = singleRow ? count : Math.ceil(count / 2);
-  const rowYs = singleRow ? [105] : ALLY_ROW_Y;
+  // 单行布局：卡顶不得超过敌方名签带下沿（名签底 ≈216，留 16px 余量防贴边），
+  // 否则主角大卡会压住第三张敌卡及其名签（R3 确认 bug）。
+  // count=1 → y=35、count=2 → 65、count=3 → 85；两行布局卡顶 200 本就安全。
+  const ALLY_TOP_SAFE = 200;
+  const rowYs = singleRow ? [ALLY_TOP_SAFE - SLOT.h / 2] : ALLY_ROW_Y;
   const rowCounts = singleRow ? [count] : [perRow, count - perRow];
   const gapX = SLOT.w + 20;
+  // 小节标题「我方」：金色、与我方第一行垂直居中（rowYs 定义后才可定位）
+  makeLabel(root, '我方', { fontSize: 16, color: COLORS.gold }).setPosition(-320, rowYs[0], 0);
 
   const allyPos = (idx: number): [number, number] => {
     const r = Math.min(Math.floor(idx / perRow), rowYs.length - 1);
