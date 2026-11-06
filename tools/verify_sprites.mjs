@@ -1,6 +1,6 @@
 // 立绘加载端到端验证（无头 Chrome + CDP，零 npm 依赖）：
 // 1) 种一个含 cao 精怪的存档（ylsz_save，loadState 会与默认值合并）；
-// 2) 刷新进游戏，点击「编队出战」进入编队页；
+// 2) 刷新进游戏，点击「编队」进入编队页；
 // 3) 检查 spirit 节点是否挂上 SpriteFrame、emoji 兜底是否隐藏；
 // 4) 汇总运行期异常。
 import { spawn } from 'node:child_process';
@@ -133,9 +133,9 @@ async function main() {
   );
   report.texCheck = texCheck;
 
-  // 2) 点击「编队出战」
+  // 2) 点击「编队」
   const clickTeam = await evaluate(
-    `(()=>{try{const ui=window.__ui;if(!ui)return 'NO_UI';let hit=null;const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('编队出战')){c.emit('click');hit=s.string;}}}walk(c);}};walk(ui);return hit?('CLICKED:'+hit):'BTN_NOT_FOUND';}catch(e){return 'ERR '+e.message;}})()`,
+    `(()=>{try{const ui=window.__ui;if(!ui)return 'NO_UI';let hit=null;const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('编队')){c.emit('click');hit=s.string;}}}walk(c);}};walk(ui);return hit?('CLICKED:'+hit):'BTN_NOT_FOUND';}catch(e){return 'ERR '+e.message;}})()`,
   );
   report.clickTeam = clickTeam;
 

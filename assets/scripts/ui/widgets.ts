@@ -17,6 +17,7 @@ import {
     Graphics,
     Color,
     resources,
+    dynamicAtlasManager,
 } from 'cc';
 
 // ─────────────────────────────────────────────────────────────
@@ -605,4 +606,95 @@ export function attachClick(node: Node, cb: () => void): void {
     const btn = node.addComponent(Button);
     btn.transition = Button.Transition.NONE;
     node.on('click', cb);
+}
+
+// ─────────────────────────────────────────────────────────────
+// 主页切图加载（1x，texture 导入，运行时包 SpriteFrame）
+// 与上面 loadUiFrame 同一套坑位写法：必须取 /texture 子资源。
+// 九宫格 border 表：键 = 文件名（不含扩展名），值 = 四边内缩 px。
+// ⚠️ ui_panel_ink/paper/deep 不在此表——它们只能走 makePanel / loadUiFrame。
+// ─────────────────────────────────────────────────────────────
+export const UI_BORDER: Record<string, number> = {
+    ui_panel_status: 22,
+    ui_bar_hp_bg: 16, ui_bar_hp_fill: 16,
+    ui_bar_unit_bg: 7, ui_bar_unit_fill: 7,
+    ui_chip_hp: 12, ui_mask_dead: 14,
+    ui_nav_bar: 24, ui_btn_nav_off: 22, ui_btn_nav_on: 22,
+    ui_badge_wave: 18,
+    ui_btn_primary: 24, ui_btn_primary_pressed: 24,
+    ui_btn_plain: 24, ui_btn_plain_pressed: 24,
+    ui_btn_green: 24, ui_btn_green_pressed: 24,
+    // ui_divider_gold / 9 枚图标：无 border，普通 Sprite
+};
+
+const homeSfCache: Record<string, SpriteFrame> = {};
+
+export function loadHomeFrame(name: string): Promise<SpriteFrame | null> {
+    if (homeSfCache[name]) return Promise.resolve(homeSfCache[name]);
+    return new Promise((resolve) => {
+        resources.load(`ui/${name}/texture`, Texture2D, (err: unknown, tex: Texture2D) => {
+            if (err || !tex) { resolve(null); return; }
+            const sf = new SpriteFrame();
+            sf.name = name;
+            sf.texture = tex;
+            sf.rect = new Rect(0, 0, tex.width, tex.height);
+            sf.originalSize = new Size(tex.width, tex.height);
+            const b = UI_BORDER[name];
+            if (b) sf.insetBorder = new Rect(b, b, b, b); // SLICED 依赖它
+            homeSfCache[name] = sf;
+            resolve(sf);
+        });
+    });
+}
+
+export const HOME_UI_NAMES = [
+    ...Object.keys(UI_BORDER),
+    'ui_divider_gold',
+    'ui_icon_aura', 'ui_icon_core', 'ui_icon_ticket', 'ui_icon_wave',
+    'ui_nav_team', 'ui_nav_gacha', 'ui_nav_dex', 'ui_nav_shop', 'ui_nav_hero',
+];
+
+export function preloadHomeUi(): void {
+    // 关闭动态图集：运行时包装的 SpriteFrame 会被打进图集，
+    // 部分 SLICED 小图（chip/血条/导航按钮/图标）在图集上渲染丢失
+    dynamicAtlasManager.enabled = false;
+    HOME_UI_NAMES.forEach(loadHomeFrame);
+}
+
+/** 创建一张切图节点：有 border 走 SLICED(1)，无 border 走 SIMPLE(0)。
+ * ⚠️ 实测（Cocos 3.8.8 web-mobile）：节点若先以 Graphics 建立渲染实体、之后换成 Sprite，
+ * 该节点会永远不渲染。所以兜底阶段不能画 Graphics，只能空等切图就绪（首帧可能短促无底）。 */
+export function makeUiSprite(
+    parent: Node, name: string, w: number, h: number,
+    fallbackHex = COLORS.panel,
+): Node {
+    void fallbackHex; // 保留参数兼容旧调用；不再用 Graphics 兜底（见上注释）
+    const n = newNode(name, parent);
+    setSize(n, w, h);
+    const apply = (sf: SpriteFrame): void => {
+        if (!n.isValid) return;
+        let sp = n.getComponent(Sprite);
+        if (!sp) sp = n.addComponent(Sprite);
+        sp.type = UI_BORDER[name] ? 1 : 0; // 1 = SLICED, 0 = SIMPLE（web-mobile 不导出枚举，用数值）
+        sp.sizeMode = 0;                    // CUSTOM：按 contentSize 拉伸
+        sp.trim = false;
+        sp.spriteFrame = sf;
+        // 异步创建的 Sprite 之前可能被 tintUiSprite 预约过染色
+        if (n['_tintHex']) sp.color = hexToColor(n['_tintHex']);
+    };
+    const cached = homeSfCache[name];
+    if (cached) {
+        apply(cached);
+    } else {
+        loadHomeFrame(name).then((sf) => { if (sf && n.isValid) apply(sf); });
+    }
+    return n;
+}
+
+/** 白色填充图染色（乘算）：血条三态、我方/敌方血条共用。
+ * Sprite 可能由 makeUiSprite 异步创建——未创建时把色值存到节点上，apply 时补染。 */
+export function tintUiSprite(n: Node, hex: string): void {
+    const sp = n.getComponent(Sprite);
+    if (sp) sp.color = hexToColor(hex);
+    else n['_tintHex'] = hex;
 }

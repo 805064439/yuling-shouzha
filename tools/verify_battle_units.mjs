@@ -30,7 +30,7 @@ function assert(name, cond, extra = '') {
   else { fail++; console.log(`  FAIL  ${name}  ${extra}`); }
 }
 
-const collect = `(()=>{let bars=0,nums=[],info='',progress='',log='',hp='',dead=0;const sw=(()=>{try{return JSON.parse(localStorage.getItem('ylsz_save')||'{}').wave}catch(e){return null}})();const walk=(n)=>{if(n.name==='unitHpBar')bars++;if(n.name==='unitHpNum'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s)nums.push(s);if(s==='已击败'||s==='倒下')dead++;}if(n.name==='unitDeadMask'&&n.active)dead++;if(n.name==='label'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s.startsWith('敌方 ·'))hp=s;if(s.includes('主角 Lv.'))info=s;if(s.includes('本关击杀'))progress=s;if((s.includes('击杀')||s.includes('退回')||s.includes('伤害')||s.includes('出现'))&&!s.startsWith('本关击杀'))log=s;}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify({bars,nums,info,progress,log,hp,dead,sw});})()`;
+const collect = `(()=>{let bars=0,nums=[],info='',progress='',log='',hp='',wave='',res=[],dead=0;const sw=(()=>{try{return JSON.parse(localStorage.getItem('ylsz_save')||'{}').wave}catch(e){return null}})();const walk=(n)=>{if(n.name==='unitHpBar')bars++;if(n.name==='unitHpNum'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s)nums.push(s);if(s==='已击败'||s==='倒下')dead++;}if(n.name==='unitDeadMask'&&n.active)dead++;if(n.name==='label'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s.startsWith('敌方 ·'))hp=s;if(s.startsWith('第 ')&&s.includes(' 波')&&!s.includes('次挑战'))wave=s;if(/^[0-9]+$/.test(s))res.push(s);if(s.includes('主角 Lv.'))info=s;if(s.includes('本关击杀'))progress=s;if((s.includes('击杀')||s.includes('退回')||s.includes('伤害')||s.includes('出现'))&&!s.startsWith('本关击杀'))log=s;}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify({bars,nums,info,progress,log,hp,wave,res,dead,sw});})()`;
 
 async function main() {
   for (let i = 0; i < 30; i++) {
@@ -90,7 +90,7 @@ async function main() {
   assert('我方与敌方血量数值不同（各自独立）',
     new Set((a.d.nums || []).filter(s => /\//.test(s)).map(s => s.split('/')[1])).size >= 2,
     JSON.stringify(a.d.nums));
-  assert('顶部灵气随击杀实时增加', /灵气 [1-9]\d*/.test(a.d.info || ''), a.d.info);
+  assert('顶部灵气随击杀实时增加', Number((a.d.res || [])[0]) > 0, JSON.stringify(a.d.res));
   assert('击杀奖励已写入存档', Number(a.save.gold) > 0, `gold=${a.save.gold}`);
   assert('本关击杀进度已显示', /本关击杀 \d+\/\d+/.test(a.d.progress || ''), a.d.progress);
   assert('战斗日志有伤害/击杀记录', /伤害|击杀|出现/.test(a.d.log || ''), a.d.log);
@@ -110,10 +110,10 @@ async function main() {
   assert('出现「退回上一关」播报', /退回/.test(b.d.log || ''), b.d.log);
   assert('存档波次确实下降', Number(b.save.wave) < 200, `wave=${b.save.wave}`);
   assert('历史最高波次不随退关下降', Number(b.save.bestWave) === 200, `best=${b.save.bestWave}`);
-  // sw 与 hp 在同一次页面求值里取得，避免两次求值之间又过一 tick 造成竞态
-  assert('血条文案跟随退回后的波次', (b.d.hp || '').includes(`第 ${b.d.sw} 波`),
-    `hp="${b.d.hp}" saved=${b.d.sw}`);
-  assert('顶部仍显示历史最高 200 波', /最高 200 波/.test(b.d.info || ''), b.d.info);
+  // sw 与 hp/wave 在同一次页面求值里取得，避免两次求值之间又过一 tick 造成竞态
+  assert('血条文案跟随退回后的波次', ((b.d.hp || '') + ' ' + (b.d.wave || '')).includes(`第 ${b.d.sw} 波`),
+    `hp="${b.d.hp}" wave="${b.d.wave}" saved=${b.d.sw}`);
+  assert('顶部仍显示历史最高 200 波', (b.d.res || [])[3] === '200', JSON.stringify(b.d.res));
   shot = await send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync('tools/battle_regress.png', Buffer.from(shot.data, 'base64'));
   console.log('  SAVED tools/battle_regress.png');

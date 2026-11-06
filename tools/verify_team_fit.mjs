@@ -74,7 +74,7 @@ async function main() {
   }
   await sleep(1500);
   // 进编队页
-  const nav = await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='btn'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('编队出战')){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
+  const nav = await evaluate(`(()=>{let hit=false;const walk=(n)=>{if(hit)return;if(n.name==='btn'&&n.getComponent('cc.Button')){const lab=n.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('编队')){n.emit('click');hit=true;return;}}}n.children.forEach(walk);};walk(window.__ui);return hit?'OK':'NOT_FOUND';})()`);
   console.log('NAV', nav);
   // 等 10 张立绘全部加载
   let ready = 0;

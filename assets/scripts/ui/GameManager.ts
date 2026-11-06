@@ -5,7 +5,7 @@ import { Node, UITransform } from 'cc';
 import { loadState, saveState, settleOffline } from '../logic/Idle';
 import { GameState } from '../logic/Save';
 import { recalcIdleMult } from '../logic/GameConfig';
-import { makeLabel, makePanel, COLORS, setBg, preloadUiPanels } from './widgets';
+import { makeLabel, makePanel, COLORS, setBg, preloadUiPanels, preloadHomeUi } from './widgets';
 import { buildTeam } from './pages/Team';
 import { buildGacha } from './pages/Gacha';
 import { buildShop } from './pages/Shop';
@@ -29,6 +29,7 @@ export class GameManager {
 
   start(): void {
     preloadUiPanels(); // 预载九宫格面板切图，makePanel 即刻可用
+    preloadHomeUi(); // 预载主页 27 张切图（状态条/血条/导航/图标），makeUiSprite 即刻可用
     recalcIdleMult(this.state); // 启动即重算挂机倍率：等级加成不依赖升级动作，旧档也能补算
     // 离线收益结算
     const r = settleOffline(this.state);
@@ -100,7 +101,7 @@ export class GameManager {
     const old = this.root.getChildByName('__toast');
     if (old) old.destroy();
 
-    const panel = makePanel(this.root, { w: 560, h: 90, bg: '#101324' });
+    const panel = makePanel(this.root, { w: 560, h: 90, bg: COLORS.panel });
     panel.name = '__toast';
     panel.setPosition(0, -620, 10);
     makeLabel(panel, msg, { fontSize: 26, color: COLORS.text });

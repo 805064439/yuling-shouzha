@@ -74,7 +74,7 @@ async function main() {
 
   // 进图鉴
   const clickDex = await evaluate(
-    `(()=>{let hit=null;const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('精怪图鉴')){c.emit('click');hit=s.string;}}}walk(c);}};walk(window.__ui);return hit?'CLICKED':'NOT_FOUND';})()`,
+    `(()=>{let hit=null;const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('图鉴')){c.emit('click');hit=s.string;}}}walk(c);}};walk(window.__ui);return hit?'CLICKED':'NOT_FOUND';})()`,
   );
   await sleep(8000); // 等图鉴立绘加载
 

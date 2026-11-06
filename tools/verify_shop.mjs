@@ -1,4 +1,4 @@
-// 商店入口专项验证：主页点「灵物商店」→ 确认商店页标题与按钮行渲染出来。
+// 商店入口专项验证：主页点「商店」→ 确认商店页标题与按钮行渲染出来。
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -67,9 +67,9 @@ const evaluate = async (expression) => {
   return r.result ? r.result.value : 'EVAL_FAIL';
 };
 
-// 点「灵物商店」
+// 点「商店」
 const clickShop = await evaluate(
-  `(()=>{try{const ui=window.__ui;if(!ui)return 'NO_UI';let hit=null;const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('灵物商店')){c.emit('click');hit=s.string;}}}walk(c);}};walk(ui);return hit?('CLICKED:'+hit):'BTN_NOT_FOUND';}catch(e){return 'ERR '+e.message;}})()`,
+  `(()=>{try{const ui=window.__ui;if(!ui)return 'NO_UI';let hit=null;const walk=(n)=>{for(const c of n.children){if(c.name==='btn'){const lab=c.children.find((x)=>x.name==='label');if(lab){const s=lab.getComponent('cc.Label');if(s&&s.string.includes('商店')){c.emit('click');hit=s.string;}}}walk(c);}};walk(ui);return hit?('CLICKED:'+hit):'BTN_NOT_FOUND';}catch(e){return 'ERR '+e.message;}})()`,
 );
 await sleep(3000);
 

@@ -65,7 +65,7 @@ async function main() {
     source: `(function(){const o=window.setInterval;window.setInterval=function(f,ms){return o.call(window,f,ms===1000?600000:ms);};})();`,
   });
 
-  const collect = `(()=>{let hp='',enemies=0,bars=0,nums=[],info='',progress='';const walk=(n)=>{if(n.name==='enemyRow'){const w2=(m)=>{if(m.name==='spirit')enemies++;m.children.forEach(w2);};n.children.forEach(w2);}if(n.name==='unitHpBar')bars++;if(n.name==='unitHpNum'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s)nums.push(s);}if(n.name==='label'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s.startsWith('敌方 ·'))hp=s;if(s.includes('主角 Lv.'))info=s;if(s.includes('本关击杀'))progress=s;}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify({hp,enemies,bars,nums,info,progress});})()`;
+  const collect = `(()=>{let hp='',wave='',enemies=0,bars=0,nums=[],info='',progress='';const walk=(n)=>{if(n.name==='enemyRow'){const w2=(m)=>{if(m.name==='spirit')enemies++;m.children.forEach(w2);};n.children.forEach(w2);}if(n.name==='unitHpBar')bars++;if(n.name==='unitHpNum'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s)nums.push(s);}if(n.name==='label'){const s=(n.getComponent('cc.Label')||{}).string||'';if(s.startsWith('敌方 ·'))hp=s;if(s.startsWith('第 ')&&s.includes(' 波')&&!s.includes('次挑战'))wave=s;if(s.includes('主角 Lv.'))info=s;if(s.includes('本关击杀'))progress=s;}n.children.forEach(walk);};walk(window.__ui);return JSON.stringify({hp,wave,enemies,bars,nums,info,progress});})()`;
 
   for (const c of CASES) {
     console.log(`\n=== ${c.name} ===`);
@@ -81,7 +81,7 @@ async function main() {
     const raw = await evaluate(collect);
     const d = typeof raw === 'string' && raw.startsWith('{') ? JSON.parse(raw) : {};
     console.log(`  hp="${d.hp}" enemies=${d.enemies} bars=${d.bars} nums=${(d.nums || []).slice(0, 4).join('|')}`);
-    for (const w of c.wants) assert(`血条含「${w}」`, (d.hp || '').includes(w));
+    for (const w of c.wants) assert(`梯队文案含「${w}」`, ((d.hp || '') + ' ' + (d.wave || '')).includes(w));
     assert(`敌方编队 ${c.enemies} 人`, d.enemies === c.enemies, `实际 ${d.enemies}`);
     assert(`独立血条 ${c.enemies + 1} 条（${c.enemies} 敌 + 1 主角）`, d.bars === c.enemies + 1, `实际 ${d.bars}`);
     assert('血条上有血量数字', (d.nums || []).some(s => /\d+\/\d+/.test(s)), JSON.stringify(d.nums));
