@@ -47,14 +47,13 @@ function makeUnitBar(
   deadText: string,
 ): UnitBar {
   // R4 P1-1：血条两端不得压纸框内沿——宽 = 舞台宽 − 2×(纸框边 12 + 6px 留白)
-  // R6 改法三：fill 绝不能与 bg 同尺寸（会盖住 bg 两端圆头），四周内缩 1px，
-  // 高度恒 12 只按 ratio 变宽——主角/敌卡单位血条三者高度一致（验收标准 12±2）
+  // R7：fill 是半圆胶囊（r=7），渲染高必须恒 14 = bg 高，只做水平内缩 1px；
+  // 主角大卡与敌卡单位血条同高（胶囊无法压缩渲染高，否则上下 cap 重叠渲染未定义）
   const barW = slotW - 36;
   const barH = 14;
   const barY = -slotH / 2 + 16;
-  const pad = 1;
-  const innerW = barW - pad * 2;
-  const innerH = barH - pad * 2; // 12，恒定不变
+  const innerW = barW - 2;      // 水平内缩 1px×2
+  const innerH = barH;          // 恒 14
   const bg = makeUiSprite(stage, 'ui_bar_unit_bg', barW, barH, '#141C1E');
   bg.name = 'unitHpBar'; // 端到端验证按此名字统计独立血条数量
   bg.setPosition(0, barY, 2);
@@ -82,7 +81,7 @@ function makeUnitBar(
     update(u: Unit) {
       const ratio = u.maxHp > 0 ? Math.max(0, Math.min(1, u.hp / u.maxHp)) : 0;
       const w = Math.max(1, ratio * innerW);
-      setSize(fill, w, innerH); // 高度恒 12，只变宽
+      setSize(fill, w, innerH); // 高度恒 14，只变宽
       fill.setPosition(-innerW / 2 + w / 2, 0, 1); // 左对齐：居中锚点公式
       tintUiSprite(fill, u.dead ? '#5A6660' : color);
       // 「已击败」只显示一处：死亡时隐藏血条位胶囊（含数字），保留卡片中央遮罩
@@ -144,11 +143,11 @@ export function buildBattle(root: Node, gm: GameManager): void {
   waveLbl.setPosition(0, 0, 1);
 
   // ④ 敌方总血条：墨面底槽 + 白色填充（运行时染三态）
-  // R6 改法二：fill 与 bg 同尺寸会盖住 bg 两端圆头（真机「两根条叠一起」），
-  // fill 四周内缩 2px：616×36，高度恒定只按 ratio 变宽，左对齐
-  const HP_PAD = 2;
-  const HP_INNER_W = 620 - HP_PAD * 2; // 616
-  const HP_INNER_H = 40 - HP_PAD * 2;  // 36，恒定不变
+  // R7 破案：此前 SLICED 从未生效（insetBorder 属性不存在），fill 纺锤/bg 锥形
+  // 全是整图拉伸的椭圆化圆角。切片真正生效后按几何定尺寸：
+  // fill 是半圆胶囊（r=20），渲染高必须恒 40，只做水平内缩 2px（616×40）。
+  const HP_INNER_W = 620 - 2 * 2; // 616，左对齐收缩
+  const HP_INNER_H = 40;          // 胶囊渲染高 = 源图高，不可压缩
   const hpBg = makeUiSprite(root, 'ui_bar_hp_bg', 620, 40, '#141C1E');
   hpBg.setPosition(0, 480, 0);
   const hpFill = makeUiSprite(hpBg, 'ui_bar_hp_fill', HP_INNER_W, HP_INNER_H, '#FFFFFF');

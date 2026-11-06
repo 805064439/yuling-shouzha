@@ -295,7 +295,10 @@ const SPRITE_TYPE_SLICED = 1; // Sprite.SpriteType.SLICED（web-mobile 构建不
 // 九宫格面板切图加载（1x 图：ink/paper 120×120 border 32；deep 96×96 border 28）
 // R4：border 16 不足以包住面板圆角（大面板拉扁弧线），按切图包文档对齐 32/28。
 // 注意：本项目 PNG 按 texture 类型导入（无 spriteFrame 子资源，与立绘同坑），
-// 因此加载 Texture2D 后运行时包成 SpriteFrame 并设置 insetBorder。
+// 因此加载 Texture2D 后运行时包成 SpriteFrame 并设置 capInsets。
+// ⚠️ R7 破案：3.8.8 引擎 SpriteFrame **没有 insetBorder 属性**（赋值静默无效，
+// _capInsets 恒 0 → SLICED 退化为整图拉伸，R4~R6 所有 border 调参因此全无视觉效果）。
+// 必须用 insetLeft/Top/Right/Bottom 四个 setter（各自触发 _calculateSlicedUV）。
 const panelSfCache: Record<string, SpriteFrame> = {};
 export function loadUiFrame(name: string): Promise<SpriteFrame | null> {
     if (panelSfCache[name]) return Promise.resolve(panelSfCache[name]);
@@ -307,7 +310,10 @@ export function loadUiFrame(name: string): Promise<SpriteFrame | null> {
         frame.texture = tex;
         frame.rect = new Rect(0, 0, tex.width, tex.height);
         frame.originalSize = new Size(tex.width, tex.height);
-        frame.insetBorder = new Rect(border, border, border, border);
+        frame.insetLeft = border;
+        frame.insetTop = border;
+        frame.insetRight = border;
+        frame.insetBottom = border;
         return frame;
     };
     return new Promise((resolve) => {
@@ -614,14 +620,16 @@ export function attachClick(node: Node, cb: () => void): void {
 // ⚠️ ui_panel_ink/paper/deep 不在此表——它们只能走 makePanel / loadUiFrame。
 // ─────────────────────────────────────────────────────────────
 export const UI_BORDER: Record<string, number> = {
-    // ⚠️ SLICED 铁律（R4/R6 真机像素实测勘误）：
-    // 1) border 必须 **严格小于** 源图短边的一半（border×2 < 短边）——等于一半即零中间带，
-    //    渲染未定义（R4 把胶囊图 border 设成 h/2，真机 bg 压扁成 27 高+锥形端头，无头 Chrome 不暴露）；
-    // 2) border 尽量 ≥ 圆角半径，否则角区包不住弧线、弧被拉扁（status 22→32 修扁弧）；
-    //    胶囊图半径恰 = h/2 时两者不可兼得，取 border=h/2−1 并接受端部轻微拉伸（艺术家勘误值）。
+    // ⚠️ R7 破案后重新定值（此前 insetBorder 无效、SLICED 从未生效，旧调参全部作废）：
+    // 1) border ≥ 源图圆角半径（角区须包住整段弧线，否则弧中段留在中间带被拉出鼓包）；
+    // 2) border×2 ≤ 渲染短边（cap 之和不得超过渲染尺寸，否则上下 cap 重叠渲染未定义）；
+    // 3) 半圆胶囊图（半径 = 源高/2）border = 半径，且渲染高必须 = 源图高（竖直零中间带，
+    //    渲染高度被压缩时上下 cap 重叠）——胶囊无法既内缩高度又保持端头，fill 只做水平内缩。
     ui_panel_status: 32,
-    ui_bar_hp_bg: 16, ui_bar_hp_fill: 16,   // 80×40：R6 勘误 20→16（20=h/2 退化）
-    ui_bar_unit_bg: 6, ui_bar_unit_fill: 6, // 48×14：R6 勘误 7→6（7=h/2 退化）
+    ui_bar_hp_bg: 16,                       // 80×40 圆角矩形（半径≈10）+ 青灰描边
+    ui_bar_hp_fill: 20,                     // 80×40 半圆胶囊：渲染高必须恒 40
+    ui_bar_unit_bg: 7,                      // 48×14 半圆胶囊：渲染高必须恒 14
+    ui_bar_unit_fill: 7,                    // 同上
     ui_chip_hp: 12, ui_mask_dead: 14,
     ui_nav_bar: 32, ui_btn_nav_off: 24, ui_btn_nav_on: 24,
     ui_badge_wave: 18,
@@ -644,7 +652,14 @@ export function loadHomeFrame(name: string): Promise<SpriteFrame | null> {
             sf.rect = new Rect(0, 0, tex.width, tex.height);
             sf.originalSize = new Size(tex.width, tex.height);
             const b = UI_BORDER[name];
-            if (b) sf.insetBorder = new Rect(b, b, b, b); // SLICED 依赖它
+            if (b) {
+                // R7 破案：insetBorder 属性在 3.8.8 引擎不存在（赋值静默无效），
+                // 必须用四个方向 setter 写 _capInsets，否则 SLICED 退化整图拉伸
+                sf.insetLeft = b;
+                sf.insetTop = b;
+                sf.insetRight = b;
+                sf.insetBottom = b;
+            }
             homeSfCache[name] = sf;
             resolve(sf);
         });
