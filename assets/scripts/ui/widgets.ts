@@ -368,11 +368,10 @@ export function makePanel(
         if (cached) {
             applyPanelSprite(n, cached);
         } else {
-            // 未预载完成：先 Graphics 色板兜底，切图就绪后替换（节点可能已被销毁，判 isValid）
-            const fallback = opts.bg ?? (surface === 'paper' ? COLORS.panelPaper : COLORS.panel);
-            setBg(n, fallback);
-            setLine(n, surface === 'paper' ? COLORS.linePaper : COLORS.line);
-            setRadius(n, opts.radius ?? RADIUS.panel);
+            // 未就绪：绝不画 Graphics 兜底——「先以 Graphics 渲染、之后异步换 Sprite」
+            // 的节点在 web-mobile 上永不渲染（切图包 v1 踩坑实录），
+            // 真机首屏日志面板无底即此因（Graphics 兜底色又与背景几乎同色）。
+            // GameManager.start 已等待全部面板切图预载完成，正常时序无空窗。
             loadUiFrame(spriteName).then((sf) => {
                 if (sf && n.isValid) applyPanelSprite(n, sf);
             });
@@ -408,12 +407,11 @@ export function makeSpiritStage(
 ): Node {
     const n = newNode('spiritStage', parent);
     setSize(n, w, h);
-    // 纸面切图打底（未就绪先 Graphics 色板兜底，加载后替换）
+    // 纸面切图打底（未就绪空等，不画 Graphics——同 makePanel 的永不渲染陷阱规避）
     const cached = panelSfCache['ui_panel_paper'];
     if (cached) {
         applyPanelSprite(n, cached);
     } else {
-        setBg(n, COLORS.panelPaper);
         loadUiFrame('ui_panel_paper').then((sf) => {
             if (sf && n.isValid) applyPanelSprite(n, sf);
         });

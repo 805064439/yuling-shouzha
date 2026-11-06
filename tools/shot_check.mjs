@@ -108,6 +108,14 @@ async function main() {
       if(status){for(const c of status.children)lines.push('  STATUS_CHILD: '+dump(c));}
       const fills=find(ui,'ui_bar_hp_fill');
       lines.push('hp_fill_count='+fills.length);
+      if(fills[0]){const ut=fills[0].getComponent('cc.UITransform');lines.push('hp_fill_size='+ut.width.toFixed(0)+'x'+ut.height.toFixed(0));}
+      // 已击败互斥性：chip 与 mask 不应同时 active
+      const chips=find(ui,'unitHpChip');const masks=find(ui,'unitDeadMask');
+      const dup=[];
+      for(let i=0;i<Math.max(chips.length,masks.length);i++){
+        if(chips[i]&&masks[i]&&chips[i].active&&masks[i].active)dup.push(i);
+      }
+      lines.push('unit_bars='+chips.length+' both_active_conflicts='+JSON.stringify(dup));
       return lines.join('\\n');
     })()`,
     returnByValue: true,

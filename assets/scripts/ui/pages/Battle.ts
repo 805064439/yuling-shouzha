@@ -79,6 +79,8 @@ function makeUnitBar(
       setSize(fill, w, barH);
       fill.setPosition((w - barW) / 2, 0, 1); // 左对齐：血条从左侧缩短
       tintUiSprite(fill, u.dead ? '#5A6660' : color);
+      // 「已击败」只显示一处：死亡时隐藏血条位胶囊（含数字），保留卡片中央遮罩
+      chip.active = !u.dead;
       (num.getComponent('cc.Label') as any).string = u.dead
         ? deadText
         : `${Math.max(0, Math.floor(u.hp))}/${u.maxHp}`;
@@ -136,9 +138,12 @@ export function buildBattle(root: Node, gm: GameManager): void {
   waveLbl.setPosition(0, 0, 1);
 
   // ④ 敌方总血条：墨面底槽 + 白色填充（运行时染三态）
+  // fill 内缩 2px（616×36）：与 bg 造型贴合成一套，不再凸出底条边缘
   const hpBg = makeUiSprite(root, 'ui_bar_hp_bg', 620, 40, '#141C1E');
   hpBg.setPosition(0, 480, 0);
-  const hpFill = makeUiSprite(hpBg, 'ui_bar_hp_fill', 620, 40, '#FFFFFF');
+  const FILL_W = 616;
+  const FILL_H = 36;
+  const hpFill = makeUiSprite(hpBg, 'ui_bar_hp_fill', FILL_W, FILL_H, '#FFFFFF');
   hpFill.setPosition(0, 0, 1);
   tintUiSprite(hpFill, hpColor(startWave));
   const hpLbl = makeLabel(hpBg, `敌方 · ${tierLabel(startWave)}`, { fontSize: 20, color: COLORS.text });
@@ -176,7 +181,8 @@ export function buildBattle(root: Node, gm: GameManager): void {
   };
 
   // —— 我方编队 + 主角（数量自适应：少则居中放大，多则两行网格）——
-  makeLabel(root, '我方', { fontSize: 20, color: COLORS.sub }).setPosition(-320, 215, 0);
+  // 小节标题样式：金色、上移避开敌方名签带（敌名 y≈228）
+  makeLabel(root, '我方', { fontSize: 16, color: COLORS.gold }).setPosition(-320, 248, 0);
   const allyRow = new Node('allyRow');
   root.addChild(allyRow);
   allyRow.setPosition(0, 0, 0);
@@ -269,9 +275,9 @@ export function buildBattle(root: Node, gm: GameManager): void {
     // 顶部总血条（左对齐缩短）+ 关底/教主三态染色
     // 注意：比例钳制必须先于宽度放大——Math.max(1, ratio) 会让血条永远满格
     const ratio = Math.max(0, Math.min(1, ev.ratio));
-    const w = Math.max(1, ratio * 620);
-    setSize(hpFill, w, 40);
-    hpFill.setPosition((w - 620) / 2, 0, 1);
+    const w = Math.max(1, ratio * FILL_W);
+    setSize(hpFill, w, FILL_H);
+    hpFill.setPosition((w - FILL_W) / 2, 0, 1);
     const curWave = ev.wave ?? battle.wave;
     tintUiSprite(hpFill, hpColor(curWave));
     (waveLbl.getComponent('cc.Label') as any).string = `第 ${curWave} 波`;

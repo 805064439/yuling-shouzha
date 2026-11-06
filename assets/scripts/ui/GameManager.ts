@@ -5,7 +5,7 @@ import { Node, UITransform } from 'cc';
 import { loadState, saveState, settleOffline } from '../logic/Idle';
 import { GameState } from '../logic/Save';
 import { recalcIdleMult } from '../logic/GameConfig';
-import { makeLabel, makePanel, COLORS, setBg, preloadUiPanels, preloadHomeUi } from './widgets';
+import { makeLabel, makePanel, COLORS, setBg, preloadUiPanels, loadUiFrame, preloadHomeUi, loadHomeFrame, HOME_UI_NAMES } from './widgets';
 import { buildTeam } from './pages/Team';
 import { buildGacha } from './pages/Gacha';
 import { buildShop } from './pages/Shop';
@@ -34,12 +34,21 @@ export class GameManager {
     // 离线收益结算
     const r = settleOffline(this.state);
     this.save();
-    this.go('battle'); // 挂机游戏：进游戏直接在战斗界面
-    if (r.elapsedSec >= 60 && r.gold > 0) {
-      const h = Math.floor(r.elapsedSec / 3600);
-      const m = Math.floor((r.elapsedSec % 3600) / 60);
-      this.toast(`离线 ${h}小时${m}分，收获 ${r.gold} 灵气`);
-    }
+    // 等面板 + 主页切图全部预载完成再进首页：页面构建时 makePanel/makeUiSprite
+    // 直接命中缓存，杜绝「Graphics 兜底后异步换 Sprite 永不渲染」陷阱（R2 真机复现）。
+    Promise.all([
+      loadUiFrame('ui_panel_ink'),
+      loadUiFrame('ui_panel_paper'),
+      loadUiFrame('ui_panel_deep'),
+      ...HOME_UI_NAMES.map((n) => loadHomeFrame(n)),
+    ]).then(() => {
+      this.go('battle'); // 挂机游戏：进游戏直接在战斗界面
+      if (r.elapsedSec >= 60 && r.gold > 0) {
+        const h = Math.floor(r.elapsedSec / 3600);
+        const m = Math.floor((r.elapsedSec % 3600) / 60);
+        this.toast(`离线 ${h}小时${m}分，收获 ${r.gold} 灵气`);
+      }
+    });
   }
 
   go(key: string, param?: string): void {
