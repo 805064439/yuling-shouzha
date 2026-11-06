@@ -614,14 +614,14 @@ export function attachClick(node: Node, cb: () => void): void {
 // ⚠️ ui_panel_ink/paper/deep 不在此表——它们只能走 makePanel / loadUiFrame。
 // ─────────────────────────────────────────────────────────────
 export const UI_BORDER: Record<string, number> = {
-    // ⚠️ SLICED 三条铁律（R4 实锤）：
-    // 1) border ≥ 图的圆角半径，否则角区包不住弧线、弧被拉扁（status 22→32 修扁弧）；
-    // 2) 胶囊图（半圆端）border = 图高/2，且渲染高度必须 = 原图高（上下 border 恰好相接、
-    //    无中间带、端部原样）——渲染高度被压缩时上下 border 重叠 → 渲染未定义（fill 鼓形凸出即此）；
-    // 3) 渲染高度 > 原图高时中间带被拉伸，border×2 必须留足中间带。
+    // ⚠️ SLICED 铁律（R4/R6 真机像素实测勘误）：
+    // 1) border 必须 **严格小于** 源图短边的一半（border×2 < 短边）——等于一半即零中间带，
+    //    渲染未定义（R4 把胶囊图 border 设成 h/2，真机 bg 压扁成 27 高+锥形端头，无头 Chrome 不暴露）；
+    // 2) border 尽量 ≥ 圆角半径，否则角区包不住弧线、弧被拉扁（status 22→32 修扁弧）；
+    //    胶囊图半径恰 = h/2 时两者不可兼得，取 border=h/2−1 并接受端部轻微拉伸（艺术家勘误值）。
     ui_panel_status: 32,
-    ui_bar_hp_bg: 20, ui_bar_hp_fill: 20,   // 80×40 胶囊：渲染高恒 40
-    ui_bar_unit_bg: 7, ui_bar_unit_fill: 7, // 48×14 胶囊：渲染高恒 14
+    ui_bar_hp_bg: 16, ui_bar_hp_fill: 16,   // 80×40：R6 勘误 20→16（20=h/2 退化）
+    ui_bar_unit_bg: 6, ui_bar_unit_fill: 6, // 48×14：R6 勘误 7→6（7=h/2 退化）
     ui_chip_hp: 12, ui_mask_dead: 14,
     ui_nav_bar: 32, ui_btn_nav_off: 24, ui_btn_nav_on: 24,
     ui_badge_wave: 18,

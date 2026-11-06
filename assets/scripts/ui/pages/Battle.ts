@@ -47,13 +47,18 @@ function makeUnitBar(
   deadText: string,
 ): UnitBar {
   // R4 P1-1：血条两端不得压纸框内沿——宽 = 舞台宽 − 2×(纸框边 12 + 6px 留白)
+  // R6 改法三：fill 绝不能与 bg 同尺寸（会盖住 bg 两端圆头），四周内缩 1px，
+  // 高度恒 12 只按 ratio 变宽——主角/敌卡单位血条三者高度一致（验收标准 12±2）
   const barW = slotW - 36;
   const barH = 14;
   const barY = -slotH / 2 + 16;
+  const pad = 1;
+  const innerW = barW - pad * 2;
+  const innerH = barH - pad * 2; // 12，恒定不变
   const bg = makeUiSprite(stage, 'ui_bar_unit_bg', barW, barH, '#141C1E');
   bg.name = 'unitHpBar'; // 端到端验证按此名字统计独立血条数量
   bg.setPosition(0, barY, 2);
-  const fill = makeUiSprite(bg, 'ui_bar_unit_fill', barW, barH, '#FFFFFF');
+  const fill = makeUiSprite(bg, 'ui_bar_unit_fill', innerW, innerH, '#FFFFFF');
   fill.name = 'unitHpFill';
   fill.setPosition(0, 0, 1);
   tintUiSprite(fill, color);
@@ -76,9 +81,9 @@ function makeUnitBar(
   return {
     update(u: Unit) {
       const ratio = u.maxHp > 0 ? Math.max(0, Math.min(1, u.hp / u.maxHp)) : 0;
-      const w = Math.max(1, ratio * barW);
-      setSize(fill, w, barH);
-      fill.setPosition((w - barW) / 2, 0, 1); // 左对齐：血条从左侧缩短
+      const w = Math.max(1, ratio * innerW);
+      setSize(fill, w, innerH); // 高度恒 12，只变宽
+      fill.setPosition(-innerW / 2 + w / 2, 0, 1); // 左对齐：居中锚点公式
       tintUiSprite(fill, u.dead ? '#5A6660' : color);
       // 「已击败」只显示一处：死亡时隐藏血条位胶囊（含数字），保留卡片中央遮罩
       chip.active = !u.dead;
@@ -139,14 +144,14 @@ export function buildBattle(root: Node, gm: GameManager): void {
   waveLbl.setPosition(0, 0, 1);
 
   // ④ 敌方总血条：墨面底槽 + 白色填充（运行时染三态）
-  // R4 实锤：fill/bg 是半圆胶囊图（80×40，半径 20），SLICED border=20 时
-  // 渲染高度必须 = 原图高 40（压缩会让上下 border 重叠 → 鼓形凸出），
-  // 故 fill 与 bg 齐平 620×40；左对齐收缩时右侧露出 bg 深色形成「槽内填充」。
+  // R6 改法二：fill 与 bg 同尺寸会盖住 bg 两端圆头（真机「两根条叠一起」），
+  // fill 四周内缩 2px：616×36，高度恒定只按 ratio 变宽，左对齐
+  const HP_PAD = 2;
+  const HP_INNER_W = 620 - HP_PAD * 2; // 616
+  const HP_INNER_H = 40 - HP_PAD * 2;  // 36，恒定不变
   const hpBg = makeUiSprite(root, 'ui_bar_hp_bg', 620, 40, '#141C1E');
   hpBg.setPosition(0, 480, 0);
-  const FILL_W = 620;
-  const FILL_H = 40;
-  const hpFill = makeUiSprite(hpBg, 'ui_bar_hp_fill', FILL_W, FILL_H, '#FFFFFF');
+  const hpFill = makeUiSprite(hpBg, 'ui_bar_hp_fill', HP_INNER_W, HP_INNER_H, '#FFFFFF');
   hpFill.setPosition(0, 0, 1);
   tintUiSprite(hpFill, hpColor(startWave));
   // R4 P1-2：关底名牌上移 34px 脱离血条 y 带（fill 不再被名牌叠盖）；
@@ -285,9 +290,9 @@ export function buildBattle(root: Node, gm: GameManager): void {
     // 顶部总血条（左对齐缩短）+ 关底/教主三态染色
     // 注意：比例钳制必须先于宽度放大——Math.max(1, ratio) 会让血条永远满格
     const ratio = Math.max(0, Math.min(1, ev.ratio));
-    const w = Math.max(1, ratio * FILL_W);
-    setSize(hpFill, w, FILL_H);
-    hpFill.setPosition((w - FILL_W) / 2, 0, 1);
+    const w = Math.max(1, ratio * HP_INNER_W);
+    setSize(hpFill, w, HP_INNER_H); // 高度恒 36，只变宽
+    hpFill.setPosition(-HP_INNER_W / 2 + w / 2, 0, 1); // 左对齐：居中锚点公式
     const curWave = ev.wave ?? battle.wave;
     tintUiSprite(hpFill, hpColor(curWave));
     (waveLbl.getComponent('cc.Label') as any).string = `第 ${curWave} 波`;
