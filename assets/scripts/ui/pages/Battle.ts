@@ -171,9 +171,11 @@ export function buildBattle(root: Node, gm: GameManager): void {
     1: '#4A5D63', 2: '#5C5068', 3: '#6E4A55', 4: '#7A4050',
   };
   let enemyBars: UnitBar[] = [];
+  const enemySlots: Node[] = []; // 敌方出手高亮用（下标 = 敌方编队下标）
   const renderEnemies = (team: EnemyDef[]): void => {
     enemyRow.removeAllChildren();
     enemyBars = [];
+    enemySlots.length = 0;
     const n = team.length;
     const gap = ENEMY_SLOT.w + 28;
     team.forEach((e, i) => {
@@ -183,6 +185,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
       stage.setPosition(x, 0, 0);
       makeSpirit(stage, enemyResPath(e.id), ENEMY_SLOT.pic, '❓', ENEMY_SLOT.picH).setPosition(0, 0, 0);
       enemyBars.push(makeUnitBar(stage, ENEMY_SLOT.w, ENEMY_SLOT.h, '#C96A5A', '已击败'));
+      enemySlots.push(stage);
       const tierTag = e.tier >= 4 ? '【教主】' : e.tier === 3 ? '【长老】' : '';
       makeLabel(enemyRow, tierTag + e.name, { fontSize: e.tier >= 3 ? 19 : 18, color: e.tier >= 3 ? COLORS.gold : COLORS.text })
         .setPosition(x, -ENEMY_SLOT.h / 2 - 14, 0);
@@ -298,7 +301,13 @@ export function buildBattle(root: Node, gm: GameManager): void {
     (hpLbl.getComponent('cc.Label') as any).string = `敌方 · ${tierLabel(curWave)}`;
     refreshInfo();
     refreshProgress(ev);
-    bump(ev.attackerId ? slots[ev.attackerId] : slots['__hero']);
+    // 步进制演出：每次 tick 只有一次攻击——出手方立绘放大高亮一下，
+    // 被击中的目标由 syncBars 立即刷新血条/「已击败」遮罩
+    if (ev.attackerSide === 'enemy' && ev.attackerIndex !== undefined) {
+      bump(enemySlots[ev.attackerIndex]);
+    } else {
+      bump(ev.attackerId ? slots[ev.attackerId] : slots['__hero']);
+    }
     if (ev.enemyChanged) renderEnemies(battle.enemyTeam);
     syncBars();
   };
