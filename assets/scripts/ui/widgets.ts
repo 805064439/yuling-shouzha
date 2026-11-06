@@ -717,3 +717,112 @@ export function tintUiSprite(n: Node, hex: string): void {
     if (sp) sp.color = hexToColor(hex);
     else n['_tintHex'] = hex;
 }
+
+// ═════════════════════════════════════════════════════════════
+// ui3 · 翡翠仙境切图包 v1（86 张，tools/jade/README.md）
+// 与旧 ui/ 并存可回退。铁律继承：
+//  ① PNG 按 texture 导入 + 运行时包 SpriteFrame（border 由代码表控制）；
+//  ② 九宫格内缩必须用 insetLeft/Top/Right/Bottom 四向 setter
+//    （insetBorder 属性在 3.8.8 引擎不存在，赋值静默无效）；
+//  ③ 兜底不画 Graphics（先 Graphics 后 Sprite 的节点永不渲染）；
+//  ④ fill 绝不与 bg 同尺寸（内缩 2px 防盖圆头）；禁 trim。
+// ═════════════════════════════════════════════════════════════
+
+/** ui3 九宫格 border 表 [left, top, right, bottom]（README §3.4 官方值） */
+export const UI3_BORDER: Record<string, [number, number, number, number]> = {
+    panel_status: [70, 12, 70, 12],
+    panel_title_coral: [40, 16, 40, 16],
+    panel_section_jade: [60, 10, 60, 10],
+    panel_jade_large: [30, 30, 30, 30],
+    panel_log_wide: [40, 14, 40, 14],
+    panel_info_jade: [24, 24, 24, 24],
+    panel_scenic_banner: [40, 20, 40, 20],
+    panel_ivory_wide: [40, 20, 40, 20],
+    button_wave: [66, 12, 66, 12],
+    chip_hp_red: [16, 10, 16, 10], chip_hp_gold: [16, 10, 16, 10], chip_hp_green: [16, 10, 16, 10],
+    bar_fill_red: [10, 6, 10, 6], bar_fill_gold: [10, 6, 10, 6], bar_fill_green: [10, 6, 10, 6],
+    plate_name_red: [36, 10, 36, 10], plate_name_gold: [36, 10, 36, 10], plate_name_green: [36, 10, 36, 10],
+    bar_thick_green: [14, 14, 14, 14],
+};
+
+function ui3Subdir(name: string): string {
+    if (name.startsWith('bg_')) return 'backgrounds';
+    if (name.startsWith('panel_')) return 'panels';
+    if (name.startsWith('frame_') || name.startsWith('card_')) return 'frames';
+    if (name.startsWith('button_')) return 'buttons';
+    if (name.startsWith('bar_') || name.startsWith('chip_') || name.startsWith('plate_')) return 'bars';
+    if (name.startsWith('tab_')) return 'tabs';
+    if (name.startsWith('icon_')) return 'icons';
+    return 'decorations';
+}
+
+const ui3SfCache: Record<string, SpriteFrame> = {};
+
+/** ui3 切图 → SpriteFrame（texture 路径 + 四向 inset），与 loadHomeFrame 同模式 */
+export function loadUi3Frame(name: string): Promise<SpriteFrame | null> {
+    if (ui3SfCache[name]) return Promise.resolve(ui3SfCache[name]);
+    return new Promise((resolve) => {
+        resources.load(`ui3/${ui3Subdir(name)}/${name}/texture`, Texture2D, (err: unknown, tex: Texture2D) => {
+            if (err || !tex) { resolve(null); return; }
+            const sf = new SpriteFrame();
+            sf.name = name;
+            sf.texture = tex;
+            sf.rect = new Rect(0, 0, tex.width, tex.height);
+            sf.originalSize = new Size(tex.width, tex.height);
+            const b = UI3_BORDER[name];
+            if (b) {
+                sf.insetLeft = b[0];
+                sf.insetTop = b[1];
+                sf.insetRight = b[2];
+                sf.insetBottom = b[3];
+            }
+            ui3SfCache[name] = sf;
+            resolve(sf);
+        });
+    });
+}
+
+/** battle 主页用到的 ui3 切图清单（预载防首屏空窗） */
+export const UI3_NAMES = [
+    'bg_spirit_realm_main',
+    'panel_status', 'panel_title_coral', 'panel_section_jade', 'panel_jade_large',
+    'button_wave',
+    'chip_hp_red', 'chip_hp_gold', 'chip_hp_green',
+    'bar_fill_red', 'bar_fill_gold', 'bar_fill_green',
+    'plate_name_gold',
+    'frame_spirit_card',
+    'button_nav_team', 'button_nav_gacha', 'button_nav_dex', 'button_nav_shop', 'button_nav_hero',
+    'icon_stone', 'icon_jade', 'icon_talisman', 'icon_moon',
+    'deco_divider_gold', 'deco_lotus_white', 'deco_cloud_a',
+];
+
+export function preloadUi3(): Promise<void> {
+    dynamicAtlasManager.enabled = false; // 同 ui/：运行时包 frame 禁动态图集
+    return Promise.all(UI3_NAMES.map(loadUi3Frame)).then(() => undefined);
+}
+
+/** ui3 切图节点：有 border 走 SLICED(1)，无 border 走 SIMPLE(0)。
+ * 安全模式同 makeUiSprite：无 Graphics 兜底，空等切图就绪。 */
+export function makeUi3Sprite(
+    parent: Node, name: string, w: number, h: number,
+): Node {
+    const n = newNode(name, parent);
+    setSize(n, w, h);
+    const apply = (sf: SpriteFrame): void => {
+        if (!n.isValid) return;
+        let sp = n.getComponent(Sprite);
+        if (!sp) sp = n.addComponent(Sprite);
+        sp.type = UI3_BORDER[name] ? 1 : 0; // 1 = SLICED, 0 = SIMPLE
+        sp.sizeMode = 0;                    // 0 = CUSTOM
+        sp.trim = false;
+        sp.spriteFrame = sf;
+        if (n['_tintHex']) sp.color = hexToColor(n['_tintHex']);
+    };
+    const cached = ui3SfCache[name];
+    if (cached) {
+        apply(cached);
+    } else {
+        loadUi3Frame(name).then((sf) => { if (sf) apply(sf); });
+    }
+    return n;
+}

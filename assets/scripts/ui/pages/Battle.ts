@@ -2,8 +2,9 @@
 // 挂机游戏无开始按钮：进页即自动开战。展示我方编队+主角 与 敌方编队立绘。
 // 每个上场单位（主角 / 精灵 / 每只怪）都有独立血条与血量数字；顶部总血条显示本关敌方总血量。
 // 全部功能入口常驻本页底部导航条（编队/召唤/图鉴/商店/主角）。
-// 视觉层 = 主页 UI 切图包 v1（暮色灵墨）：状态条/波次徽章/血条/金线/导航条均为切图，
-// 白色填充图运行时染色；布局坐标按《主页UI切图包-v1/README.md》§1 坐标表。
+// 视觉层 = ui3 翡翠仙境切图包 v1（绿底金框卡牌体系，tools/jade/README.md）：
+// 背景/状态栏/珊瑚横幅/波次徽章/金框卡/血条三色/名牌/导航按钮均为切图，
+// 三色血条用切图直选（red=敌/普怪、gold=精英/教主、green=我方），不再运行时染色。
 
 import { Node, UITransform } from 'cc';
 import type { GameManager } from '../GameManager';
@@ -12,16 +13,28 @@ import type { BattleEvent, Unit } from '../../logic/Battle';
 import { SPIRIT_BY_ID, spiritResPath } from '../../logic/Spirits';
 import type { EnemyDef } from '../../logic/Enemies';
 import { enemyResPath } from '../../logic/Enemies';
-import { RARITY_COLOR } from '../../logic/GameConfig';
 import { stageForWave, isBossWave, isEliteWave } from '../../logic/Difficulty';
 import {
-  makeLabel, makeSpirit, makeSpiritStage, makePanel, setSize, setBg,
-  makeUiSprite, tintUiSprite, attachClick, COLORS,
+  makeLabel, makeSpirit, setSize, setBg,
+  makeUiSprite, makeUi3Sprite, attachClick,
 } from '../widgets';
 
-const ENEMY_SLOT = { w: 170, h: 175, pic: 148, picH: 158 }; // 敌方立绘槽（3 只）
-const ALLY_SLOT = { w: 180, h: 190, pic: 165, picH: 172 }; // 我方立绘槽（≥4 人两行网格时使用；≤3 人自适应放大）
-const ALLY_ROW_Y = [105, -105]; // 我方两行的纵坐标
+// 金框卡牌内窗（frame_spirit_card 197×254，内窗 x11-186 y11-197）
+const ENEMY_CARD = { w: 186, h: 240, pic: 152, picH: 162 }; // 敌方 3 卡
+const HERO_CARD = { w: 240, h: 310, pic: 200, picH: 214 };  // count=1 主角大卡（设计意图）
+const CARD_2 = { w: 210, h: 271, pic: 172, picH: 185 };
+const CARD_3 = { w: 186, h: 240, pic: 152, picH: 162 };
+const ALLY_CARD = { w: 186, h: 240, pic: 152, picH: 162 };  // ≥4 两行网格
+const ALLY_ROW_Y = [140, -110]; // 我方两行的纵坐标（单行时动态求安全位）
+
+/** 翡翠色板（README §4 文字规范） */
+const JADE = {
+  goldText: '#E8C87E',   // 状态栏数值 / 导航 label / 波次
+  chipNum: '#EFDFA8',    // 胶囊数值
+  body: '#F0EAD6',       // 面板正文（米白）
+  namePlate: '#5E705A',  // 名牌文字（墨绿）
+  sub: '#C2D0BC',        // 次要信息（进度行/标签）
+};
 
 /** 梯队名 + 关底/教主标记（不含「第 N 波」前缀，波次由徽章显示） */
 function tierLabel(wave: number): string {
@@ -29,69 +42,76 @@ function tierLabel(wave: number): string {
   return `${stageForWave(wave).name}${mark}`;
 }
 
-/** 总血条三态：普通暖红 / 精英橙 / 教主深红 */
-function hpColor(wave: number): string {
-  return isBossWave(wave) ? '#A8453F' : isEliteWave(wave) ? '#C9823F' : '#C96A5A';
+/** 血条三色语义：普通=红、精英/关底/教主=金（README §5.7 勿混搭） */
+function barFillName(wave: number): string {
+  return isBossWave(wave) || isEliteWave(wave) ? 'bar_fill_gold' : 'bar_fill_red';
 }
 
 interface UnitBar {
   update(u: Unit): void;
 }
 
-/** 在立绘舞台底部叠加一条独立血条 + 血量数字 + 倒下遮罩（单位血条切图版） */
+/**
+ * 金框卡牌：frame_spirit_card（内窗打孔，立绘放内窗）+ 三件套
+ * chip_hp（数字胶囊，卡内下部）/ bar_fill（进度条）/ plate_name（金缎带名牌，卡底舌位）
+ * + 死亡遮罩（沿用旧 ui_mask_dead）。节点名保留 unitHp* 供端到端探针统计。
+ */
 function makeUnitBar(
   stage: Node,
-  slotW: number,
-  slotH: number,
-  color: string,
+  cardW: number,
+  cardH: number,
+  color: 'red' | 'gold' | 'green',
+  unitName: string,
   deadText: string,
 ): UnitBar {
-  // R4 P1-1：血条两端不得压纸框内沿——宽 = 舞台宽 − 2×(纸框边 12 + 6px 留白)
-  // R7：fill 是半圆胶囊（r=7），渲染高必须恒 14 = bg 高，只做水平内缩 1px；
-  // 主角大卡与敌卡单位血条同高（胶囊无法压缩渲染高，否则上下 cap 重叠渲染未定义）
-  const barW = slotW - 36;
-  const barH = 14;
-  const barY = -slotH / 2 + 16;
-  const innerW = barW - 2;      // 水平内缩 1px×2
-  const innerH = barH;          // 恒 14
-  const bg = makeUiSprite(stage, 'ui_bar_unit_bg', barW, barH, '#141C1E');
-  bg.name = 'unitHpBar'; // 端到端验证按此名字统计独立血条数量
-  bg.setPosition(0, barY, 2);
-  const fill = makeUiSprite(bg, 'ui_bar_unit_fill', innerW, innerH, '#FFFFFF');
-  fill.name = 'unitHpFill';
-  fill.setPosition(0, 0, 1);
-  tintUiSprite(fill, color);
-
-  // 血量数字必须坐深色胶囊：立绘有浅色大面，白字直接压上去会看不清
-  const chip = makeUiSprite(stage, 'ui_chip_hp', 92, 26, COLORS.bg);
+  const k = cardH / 240; // 卡内组件坐标按 186×240 基准等比换算
+  // ① 立绘内窗：中心在卡中心上方 ~22k，立绘由外部 makeSpirit 放入
+  // ② 血量数字胶囊
+  const chipW = Math.min(118 * k, cardW - 44);
+  const chip = makeUi3Sprite(stage, `chip_hp_${color}`, chipW, 24);
   chip.name = 'unitHpChip';
-  chip.setPosition(0, barY + 24, 3);
-  const num = makeLabel(chip, '', { fontSize: 14, color: COLORS.text });
+  chip.setPosition(0, -72 * k, 3);
+  const num = makeLabel(chip, '', { fontSize: 14, color: JADE.chipNum });
   num.name = 'unitHpNum';
-  setSize(num, 92, 20);
+  setSize(num, chipW - 8, 20);
   num.setPosition(0, 0, 1);
-
-  const mask = makeUiSprite(stage, 'ui_mask_dead', slotW - 36, 44, '#141C1E');
+  // ③ 进度条（fill 即条，参考图无底槽；残血右侧留空）
+  const barW = Math.min(132 * k, cardW - 44);
+  const innerW = barW - 4; // fill 内缩 2px×2
+  const fill = makeUi3Sprite(stage, `bar_fill_${color}`, barW, 14);
+  fill.name = 'unitHpFill';
+  fill.setPosition(0, -88 * k, 2); // update 时按 ratio 左对齐重算
+  // ④ 名牌缎带（卡底舌位，与 fill 留 3px 空隙防相切）
+  const plateW = Math.min(148 * k, cardW - 24);
+  const plate = makeUi3Sprite(stage, 'plate_name_gold', plateW, 22);
+  plate.setPosition(0, -109 * k, 3);
+  const nameLbl = makeLabel(plate, unitName, { fontSize: plateW > 120 ? 15 : 13, color: JADE.namePlate });
+  setSize(nameLbl, plateW - 30, 18);
+  nameLbl.setPosition(0, 0, 1);
+  // ⑤ 死亡遮罩（旧 ui/ 切图：卡片中央红描边「已击败/倒下」）
+  const mask = makeUiSprite(stage, 'ui_mask_dead', slotSafeW(cardW), 44, '#141C1E');
   mask.name = 'unitDeadMask';
   mask.setPosition(0, 0, 4);
-  makeLabel(mask, deadText, { fontSize: 18, color: COLORS.text });
   mask.active = false;
 
   return {
     update(u: Unit) {
       const ratio = u.maxHp > 0 ? Math.max(0, Math.min(1, u.hp / u.maxHp)) : 0;
       const w = Math.max(1, ratio * innerW);
-      setSize(fill, w, innerH); // 高度恒 14，只变宽
-      fill.setPosition(-innerW / 2 + w / 2, 0, 1); // 左对齐：居中锚点公式
-      tintUiSprite(fill, u.dead ? '#5A6660' : color);
-      // 「已击败」只显示一处：死亡时隐藏血条位胶囊（含数字），保留卡片中央遮罩
-      chip.active = !u.dead;
+      setSize(fill, w, 14); // 高度恒 14，只变宽
+      fill.setPosition(-innerW / 2 + w / 2, -88 * k, 2); // 左对齐：居中锚点公式
+      fill.active = !u.dead;
+      chip.active = !u.dead; // 「已击败」只显示一处：死亡隐藏胶囊与条，保留中央遮罩
       (num.getComponent('cc.Label') as any).string = u.dead
         ? deadText
         : `${Math.max(0, Math.floor(u.hp))}/${u.maxHp}`;
       mask.active = u.dead;
     },
   };
+}
+
+function slotSafeW(cardW: number): number {
+  return Math.min(cardW - 36, 220);
 }
 
 export function buildBattle(root: Node, gm: GameManager): void {
@@ -103,25 +123,31 @@ export function buildBattle(root: Node, gm: GameManager): void {
   let logSink: ((msg: string) => void) | null = null;
   const battle = new Battle(s, (msg: string) => { if (logSink) logSink(msg); }, () => gm.save());
 
-  // ① 顶部状态条：墨面 + 4 组「图标 + 金色数字」，灵气/灵核随每只击杀实时跳动
-  const status = makeUiSprite(root, 'ui_panel_status', 710, 72, COLORS.panel);
-  status.setPosition(0, 625, 0);
-  const RES: Array<[string, () => string, string]> = [
-    ['ui_icon_aura', () => `${Math.floor(s.gold)}`, '灵气'],
-    ['ui_icon_core', () => `${s.cores || 0}`, '灵核'],
-    ['ui_icon_ticket', () => `${s.tickets}`, '券'],
-    ['ui_icon_wave', () => `${Math.max(1, s.bestWave || 1)}`, '最高波'],
+  // ⓪ 背景：翡翠仙境山水（750×1334 整图铺底，最先添加 = 最底层）
+  // 注意：不加额外装饰件——背景与 panel_status 两端已自带莲花/云纹，再叠会互相压。
+  const bg = makeUi3Sprite(root, 'bg_spirit_realm_main', 750, 1334);
+  bg.setPosition(0, 0, 0);
+
+  // ① 顶部状态条：panel_status（两端莲花端饰，只横向拉伸）
+  // 四组货币 = 「图标 + 金色数字」单行（对齐仿真图；状态栏高 70 塞不下三层）
+  const status = makeUi3Sprite(root, 'panel_status', 729, 70);
+  status.setPosition(0, 622, 0);
+  const RES: Array<[string, () => string]> = [
+    ['icon_stone', () => `${Math.floor(s.gold)}`],
+    ['icon_jade', () => `${s.cores || 0}`],
+    ['icon_talisman', () => `${s.tickets}`],
+    ['icon_moon', () => `${Math.max(1, s.bestWave || 1)}`],
   ];
   const resLabels: Node[] = [];
-  makeLabel(status, `主角 Lv.${s.level}`, { fontSize: 22, color: COLORS.text })
-    .setPosition(-270, 0, 1);
-  RES.forEach(([icon, get, label], i) => {
-    const x = -140 + i * 135;
-    makeUiSprite(status, icon, 36, 36, COLORS.gold).setPosition(x - 34, 0, 1);
-    const num = makeLabel(status, get(), { fontSize: 24, color: COLORS.gold });
-    num.setPosition(x + 6, 0, 1);
+  // 端饰避让：panel_status 两端莲花端饰区约 70px 宽，内容须收在 ±294 内
+  makeLabel(status, `主角 Lv.${s.level}`, { fontSize: 21, color: JADE.goldText })
+    .setPosition(-210, 0, 1);
+  RES.forEach(([icon, get], i) => {
+    const x = -116 + i * 124;
+    makeUi3Sprite(status, icon, 28, 33).setPosition(x - 26, 0, 1);
+    const num = makeLabel(status, get(), { fontSize: 20, color: JADE.goldText });
+    num.setPosition(x + 16, 0, 1);
     resLabels.push(num);
-    makeLabel(status, label, { fontSize: 15, color: COLORS.sub }).setPosition(x + 6, -20, 1);
   });
   const refreshInfo = (): void => {
     RES.forEach(([, get], i) => {
@@ -131,69 +157,66 @@ export function buildBattle(root: Node, gm: GameManager): void {
   };
   refreshInfo();
 
-  // ② 进度行：本关击杀 / 历史最高 / 挑战次数
-  const progressLbl = makeLabel(root, '', { fontSize: 17, color: COLORS.sub });
+  // ② 进度行
+  const progressLbl = makeLabel(root, '', { fontSize: 17, color: JADE.sub });
   setSize(progressLbl, 660, 22);
-  progressLbl.setPosition(0, 572, 0);
+  progressLbl.setPosition(-40, 575, 0);
 
-  // ③ 波次徽章（血条上方右偏，金色强调）
-  const badge = makeUiSprite(root, 'ui_badge_wave', 200, 56, COLORS.bg);
+  // ③ 波次徽章（button_wave，文字已清空由程序绘）
+  const badge = makeUi3Sprite(root, 'button_wave', 220, 58);
   badge.setPosition(230, 540, 0);
-  const waveLbl = makeLabel(badge, `第 ${startWave} 波`, { fontSize: 22, color: COLORS.gold });
+  const waveLbl = makeLabel(badge, `第 ${startWave} 波`, { fontSize: 22, color: JADE.goldText });
   waveLbl.setPosition(0, 0, 1);
 
-  // ④ 敌方总血条：墨面底槽 + 白色填充（运行时染三态）
-  // R7 破案：此前 SLICED 从未生效（insetBorder 属性不存在），fill 纺锤/bg 锥形
-  // 全是整图拉伸的椭圆化圆角。切片真正生效后按几何定尺寸：
-  // fill 是半圆胶囊（r=20），渲染高必须恒 40，只做水平内缩 2px（616×40）。
-  const HP_INNER_W = 620 - 2 * 2; // 616，左对齐收缩
-  const HP_INNER_H = 40;          // 胶囊渲染高 = 源图高，不可压缩
-  const hpBg = makeUiSprite(root, 'ui_bar_hp_bg', 620, 40, '#141C1E');
-  hpBg.setPosition(0, 480, 0);
-  const hpFill = makeUiSprite(hpBg, 'ui_bar_hp_fill', HP_INNER_W, HP_INNER_H, '#FFFFFF');
-  hpFill.setPosition(0, 0, 1);
-  tintUiSprite(hpFill, hpColor(startWave));
-  // R4 P1-2：关底名牌上移 34px 脱离血条 y 带（fill 不再被名牌叠盖）；
-  // 字号 18 保证最坏 14 字时文字右缘 ~116 < 徽章左缘 130，不撞波次徽章
-  const hpLbl = makeLabel(hpBg, `敌方 · ${tierLabel(startWave)}`, { fontSize: 18, color: COLORS.text });
-  setSize(hpLbl, 620, 24);
-  hpLbl.setPosition(0, 34, 2);
+  // ④ 敌方总血条：chip_hp_red 深胶囊做底槽 + bar_fill 三色切换（普通红/精英教主金）
+  // fill 内缩：612×28（bg 620×40），高度恒定只按 ratio 变宽、左对齐
+  const HPBG_W = 620;
+  const HP_INNER_W = 612;
+  const HP_INNER_H = 28;
+  const hpBg = makeUi3Sprite(root, 'chip_hp_red', HPBG_W, 40);
+  hpBg.name = 'ui_bar_hp_bg'; // 端到端探针兼容
+  hpBg.setPosition(0, 495, 0);
+  const hpFillR = makeUi3Sprite(hpBg, 'bar_fill_red', HP_INNER_W, HP_INNER_H);
+  hpFillR.name = 'ui_bar_hp_fill';
+  const hpFillG = makeUi3Sprite(hpBg, 'bar_fill_gold', HP_INNER_W, HP_INNER_H);
+  hpFillG.name = 'ui_bar_hp_fill_gold';
+  hpFillG.active = false;
+  const hpLbl = makeLabel(hpBg, `敌方 · ${tierLabel(startWave)}`, { fontSize: 17, color: '#FFF8E8' });
+  setSize(hpLbl, HPBG_W - 40, 22);
+  hpLbl.setPosition(0, 0, 2);
 
-  // 金线分隔（普通 Sprite 横向拉伸，不做九宫格）
-  makeUiSprite(root, 'ui_divider_gold', 620, 4, COLORS.gold).setPosition(0, 448, 0);
-  makeLabel(root, '敌方编队 · 蚀灵教', { fontSize: 19, color: COLORS.sub }).setPosition(0, 432, 0);
+  // ⑤ 敌方标题：panel_title_coral 红珊瑚横幅（内含莲花徽记）
+  const titleBanner = makeUi3Sprite(root, 'panel_title_coral', 560, 46);
+  titleBanner.setPosition(0, 448, 0);
+  makeLabel(titleBanner, '敌方编队 · 蚀灵教', { fontSize: 20, color: '#FFF0DC' })
+    .setPosition(0, 0, 1);
 
-  // —— 敌方编队（蚀灵教）：每只怪一张立绘 + 独立血条 ——
+  // —— 敌方编队（蚀灵教）：每只怪一张金框卡 ——
   const enemyRow = new Node('enemyRow');
   root.addChild(enemyRow);
-  enemyRow.setPosition(0, 330, 0);
-  const tierStageColor: Record<number, string> = {
-    1: '#4A5D63', 2: '#5C5068', 3: '#6E4A55', 4: '#7A4050',
-  };
-  let enemyBars: UnitBar[] = [];
+  enemyRow.setPosition(0, 320, 0);
   const enemySlots: Node[] = []; // 敌方出手高亮用（下标 = 敌方编队下标）
+  let enemyBars: UnitBar[] = [];
   const renderEnemies = (team: EnemyDef[]): void => {
     enemyRow.removeAllChildren();
     enemyBars = [];
     enemySlots.length = 0;
     const n = team.length;
-    const gap = ENEMY_SLOT.w + 28;
+    const gap = ENEMY_CARD.w + 22; // §2：3 列卡牌，列间距 ~22
     team.forEach((e, i) => {
       const x = (i - (n - 1) / 2) * gap;
-      // 铁律：深底不放裸立绘 → 敌方立绘坐分层冷色纸舞台
-      const stage = makeSpiritStage(enemyRow, ENEMY_SLOT.w, ENEMY_SLOT.h, tierStageColor[e.tier] ?? '#4A5D63');
-      stage.setPosition(x, 0, 0);
-      makeSpirit(stage, enemyResPath(e.id), ENEMY_SLOT.pic, '❓', ENEMY_SLOT.picH).setPosition(0, 0, 0);
-      enemyBars.push(makeUnitBar(stage, ENEMY_SLOT.w, ENEMY_SLOT.h, '#C96A5A', '已击败'));
-      enemySlots.push(stage);
-      const tierTag = e.tier >= 4 ? '【教主】' : e.tier === 3 ? '【长老】' : '';
-      makeLabel(enemyRow, tierTag + e.name, { fontSize: e.tier >= 3 ? 19 : 18, color: e.tier >= 3 ? COLORS.gold : COLORS.text })
-        .setPosition(x, -ENEMY_SLOT.h / 2 - 14, 0);
+      const card = makeUi3Sprite(enemyRow, 'frame_spirit_card', ENEMY_CARD.w, ENEMY_CARD.h);
+      card.setPosition(x, 0, 0);
+      // 立绘放内窗（内窗中心在卡中心上方 ~22px），不染卡框（会连金边一起染）
+      makeSpirit(card, enemyResPath(e.id), ENEMY_CARD.pic, '❓', ENEMY_CARD.picH).setPosition(0, 22, 0);
+      // 三色语义：长老/教主 gold，普通 red
+      const color: 'red' | 'gold' = e.tier >= 3 ? 'gold' : 'red';
+      enemyBars.push(makeUnitBar(card, ENEMY_CARD.w, ENEMY_CARD.h, color, e.name, '已击败'));
+      enemySlots.push(card);
     });
   };
 
   // —— 我方编队 + 主角（数量自适应：少则居中放大，多则两行网格）——
-  // 小节标题样式：金色、上移避开敌方名签带（敌名 y≈228）
   const allyRow = new Node('allyRow');
   root.addChild(allyRow);
   allyRow.setPosition(0, 0, 0);
@@ -201,30 +224,23 @@ export function buildBattle(root: Node, gm: GameManager): void {
   const slots: Record<string, Node> = {}; // attackerId → 立绘节点（出手高亮）
   const bump = (n: Node | undefined): void => {
     if (!n || !n.isValid) return;
-    n.setScale(1.18, 1.18, 1);
+    n.setScale(1.15, 1.15, 1);
     setTimeout(() => { if (n.isValid) n.setScale(1, 1, 1); }, 380);
   };
 
   const team = s.team || [];
   const count = team.length + 1; // 主角 + 编队
-  const SLOT = count === 1
-    ? { w: 300, h: 330, pic: 280, picH: 305 }
-    : count === 2
-      ? { w: 250, h: 270, pic: 230, picH: 250 }
-      : count === 3
-        ? { w: 210, h: 230, pic: 190, picH: 210 }
-        : ALLY_SLOT;
+  const SLOT = count === 1 ? HERO_CARD : count === 2 ? CARD_2 : CARD_3;
   const singleRow = count <= 3;
   const perRow = singleRow ? count : Math.ceil(count / 2);
-  // 单行布局：卡顶不得超过敌方名签带下沿（名签底 ≈216，留 16px 余量防贴边），
-  // 否则主角大卡会压住第三张敌卡及其名签（R3 确认 bug）。
-  // count=1 → y=35、count=2 → 65、count=3 → 85；两行布局卡顶 200 本就安全。
-  const ALLY_TOP_SAFE = 200;
+  // 单行布局：卡顶不得超过敌方卡行下沿（敌卡底 = 320 - 120 = 200，留 16px 余量），
+  // 否则主角大卡会压住敌方卡牌（R3 确认 bug 的同款约束）。
+  const ALLY_TOP_SAFE = 184;
   const rowYs = singleRow ? [ALLY_TOP_SAFE - SLOT.h / 2] : ALLY_ROW_Y;
   const rowCounts = singleRow ? [count] : [perRow, count - perRow];
-  const gapX = SLOT.w + 20;
-  // 小节标题「我方」：金色、与我方第一行垂直居中（rowYs 定义后才可定位）
-  makeLabel(root, '我方', { fontSize: 16, color: COLORS.gold }).setPosition(-320, rowYs[0], 0);
+  const gapX = SLOT.w + 22;
+  // 小节标题「我方」：金色、与我方第一行垂直居中
+  makeLabel(root, '我方', { fontSize: 16, color: JADE.goldText }).setPosition(-330, rowYs[0], 0);
 
   const allyPos = (idx: number): [number, number] => {
     const r = Math.min(Math.floor(idx / perRow), rowYs.length - 1);
@@ -233,42 +249,36 @@ export function buildBattle(root: Node, gm: GameManager): void {
   };
 
   const allyBars: UnitBar[] = [];
-  // 单行布局的立绘槽会放大到 330px，名字标签自带 ~50px 文本框，
-  // 仍用 12px 间距会顶到底部血条；两行布局则必须保持 12px 才不压到下一排。
-  const nameGap = singleRow ? 30 : 12;
   // 主角卡（立绘：spirits/protagonist.png，设定=执笔育灵师·小椿）
   const [hx, hy] = allyPos(0);
-  const heroStage = makeSpiritStage(allyRow, SLOT.w, SLOT.h, '#5FAE57');
-  heroStage.setPosition(hx, hy, 0);
-  makeSpirit(heroStage, 'spirits/protagonist', SLOT.pic, '🌸', SLOT.picH).setPosition(0, 0, 0);
-  allyBars.push(makeUnitBar(heroStage, SLOT.w, SLOT.h, '#5FAE57', '倒下'));
-  makeLabel(allyRow, '主角·小椿', { fontSize: 17, color: COLORS.text }).setPosition(hx, hy - SLOT.h / 2 - nameGap, 0);
-  slots['__hero'] = heroStage;
+  const heroCard = makeUi3Sprite(allyRow, 'frame_spirit_card', SLOT.w, SLOT.h);
+  heroCard.setPosition(hx, hy, 0);
+  makeSpirit(heroCard, 'spirits/protagonist', SLOT.pic, '🌸', SLOT.picH).setPosition(0, 22 * (SLOT.h / 240), 0);
+  allyBars.push(makeUnitBar(heroCard, SLOT.w, SLOT.h, 'green', '主角·小椿', '倒下'));
+  slots['__hero'] = heroCard;
 
   team.forEach((id, i) => {
     const sp = SPIRIT_BY_ID[id];
     const [x, y] = allyPos(i + 1);
-    const stage = makeSpiritStage(allyRow, SLOT.w, SLOT.h, sp ? (RARITY_COLOR[sp.rarity] ?? '#888888') : '#888888');
-    stage.setPosition(x, y, 0);
-    makeSpirit(stage, sp ? spiritResPath(sp, s.prog?.[id]?.evo ?? 0) : '', SLOT.pic, sp?.icon ?? '❓', SLOT.picH).setPosition(0, 0, 0);
-    allyBars.push(makeUnitBar(stage, SLOT.w, SLOT.h, '#5FAE57', '倒下'));
-    makeLabel(allyRow, sp?.name ?? '???', { fontSize: 17, color: COLORS.text }).setPosition(x, y - SLOT.h / 2 - nameGap, 0);
-    slots[id] = stage;
+    const card = makeUi3Sprite(allyRow, 'frame_spirit_card', SLOT.w, SLOT.h);
+    card.setPosition(x, y, 0);
+    makeSpirit(card, sp ? spiritResPath(sp, s.prog?.[id]?.evo ?? 0) : '', SLOT.pic, sp?.icon ?? '❓', SLOT.picH)
+      .setPosition(0, 22 * (SLOT.h / 240), 0);
+    allyBars.push(makeUnitBar(card, SLOT.w, SLOT.h, 'green', sp?.name ?? '???', '倒下'));
+    slots[id] = card;
   });
 
-  // —— 战斗日志（墨面面板 + 金线收在面板顶内侧，文字从金线下方起排）——
-  // 文本节点顶锚（anchorY=1）+ SHRINK：多行文字只向下生长且超行自动缩字号，
-  // 彻底避免「金线横穿文字 / 文字溢出面板顶」。
-  const logPanel = makePanel(root, { w: 660, h: 175, bg: COLORS.panel });
-  logPanel.setPosition(0, -305, 0);
-  makeUiSprite(logPanel, 'ui_divider_gold', 620, 4, COLORS.gold).setPosition(0, 76, 1);
-  const logLabel = makeLabel(logPanel, `${tierLabel(startWave)} · 挂机战斗中…`, { fontSize: 18, color: COLORS.sub, wrapWidth: 620 });
+  // —— 战斗日志：panel_jade_large 深绿云纹大面板（自带金双边框）——
+  // 文字顶锚（anchorY=1）+ SHRINK：多行只向下生长且超行自动缩字号
+  const logPanel = makeUi3Sprite(root, 'panel_jade_large', 660, 160);
+  logPanel.setPosition(0, -320, 0);
+  const logLabel = makeLabel(logPanel, `${tierLabel(startWave)} · 挂机战斗中…`, { fontSize: 18, color: JADE.body, wrapWidth: 600 });
   const logLab = logLabel.getComponent('cc.Label') as any;
   logLab.overflow = 2; // 2 = Overflow.SHRINK（web-mobile 构建不导出枚举，用数值）
   logLab.lineHeight = 27;
-  setSize(logLabel, 620, 128);
+  setSize(logLabel, 600, 118);
   (logLabel.getComponent(UITransform) as any).anchorY = 1;
-  logLabel.setPosition(0, 54, 1);
+  logLabel.setPosition(0, 62, 1);
   logSink = (msg: string) => {
     const cur = (logLabel.getComponent('cc.Label') as any).string || '';
     const lines = cur.split('\n').filter(Boolean);
@@ -288,15 +298,20 @@ export function buildBattle(root: Node, gm: GameManager): void {
     battle.allies.forEach((u, i) => { if (allyBars[i]) allyBars[i].update(u); });
   };
 
+  const setTotalHp = (ratio: number, wave: number): void => {
+    const w = Math.max(1, Math.min(1, ratio) * HP_INNER_W);
+    const gold = barFillName(wave) === 'bar_fill_gold';
+    for (const f of [hpFillR, hpFillG]) {
+      setSize(f, w, HP_INNER_H);
+      f.setPosition(-HP_INNER_W / 2 + w / 2, 0, 1); // 左对齐：居中锚点公式
+    }
+    hpFillR.active = !gold;
+    hpFillG.active = gold;
+  };
+
   const onTick = (ev: BattleEvent) => {
-    // 顶部总血条（左对齐缩短）+ 关底/教主三态染色
-    // 注意：比例钳制必须先于宽度放大——Math.max(1, ratio) 会让血条永远满格
-    const ratio = Math.max(0, Math.min(1, ev.ratio));
-    const w = Math.max(1, ratio * HP_INNER_W);
-    setSize(hpFill, w, HP_INNER_H); // 高度恒 36，只变宽
-    hpFill.setPosition(-HP_INNER_W / 2 + w / 2, 0, 1); // 左对齐：居中锚点公式
     const curWave = ev.wave ?? battle.wave;
-    tintUiSprite(hpFill, hpColor(curWave));
+    setTotalHp(ev.ratio, curWave);
     (waveLbl.getComponent('cc.Label') as any).string = `第 ${curWave} 波`;
     (hpLbl.getComponent('cc.Label') as any).string = `敌方 · ${tierLabel(curWave)}`;
     refreshInfo();
@@ -315,29 +330,27 @@ export function buildBattle(root: Node, gm: GameManager): void {
   renderEnemies(battle.enemyTeam);
   refreshProgress();
   syncBars();
+  setTotalHp(battle.enemyRatio(), battle.wave);
   battle.start(onTick);
 
-  // ⑦ 底部导航条：切图按钮 + 描线图标，无 emoji
-  const navBar = makeUiSprite(root, 'ui_nav_bar', 750, 140, COLORS.panel);
-  navBar.setPosition(0, -560, 0);
+  // ⑦ 底部导航：button_nav_* 五枚（图标保留、文字清空由程序绘 label）
   const NAV: Array<[string, string, string]> = [
-    ['ui_nav_team', '编队', 'team'],
-    ['ui_nav_gacha', '召唤', 'gacha'],
-    ['ui_nav_dex', '图鉴', 'dex'],
-    ['ui_nav_shop', '商店', 'shop'],
-    ['ui_nav_hero', '主角', 'protagonist'],
+    ['button_nav_team', '编队', 'team'],
+    ['button_nav_gacha', '召唤', 'gacha'],
+    ['button_nav_dex', '图鉴', 'dex'],
+    ['button_nav_shop', '商店', 'shop'],
+    ['button_nav_hero', '主角', 'protagonist'],
   ];
   NAV.forEach(([icon, label, key], i) => {
     const x = -296 + i * 148;
     const active = gm.current === key;
-    const btn = makeUiSprite(navBar, active ? 'ui_btn_nav_on' : 'ui_btn_nav_off', 132, 88, COLORS.panel);
+    const btn = makeUi3Sprite(root, icon, 148, 77);
     btn.name = 'btn'; // 与旧 makeButton 同名：端到端脚本按 name==='btn' 找导航
-    btn.setPosition(x, 8, 1);
-    makeUiSprite(btn, icon, 44, 44, active ? COLORS.gold : COLORS.text)
-      .setPosition(0, 12, 2);
+    btn.setPosition(x, -560, 0);
+    if (active) btn.setScale(1.06, 1.06, 1); // 当前页：按钮微放大 + label 金色
     makeLabel(btn, label, {
-      fontSize: 18, color: active ? COLORS.gold : COLORS.text,
-    }).setPosition(0, -26, 2);
+      fontSize: 16, color: active ? JADE.goldText : JADE.sub,
+    }).setPosition(0, -18, 1);
     attachClick(btn, () => gm.go(key));
   });
 
