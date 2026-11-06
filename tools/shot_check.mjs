@@ -8,6 +8,7 @@ import path from 'node:path';
 const TARGET = process.argv[2] || 'http://127.0.0.1:8088/';
 const OUT = process.argv[3] || 'tools/shot_check.png';
 const PORT = 9224;
+const DPR = Number(process.argv[5] || 1); // 第 5 参数：设备缩放（2 = 模拟真机高 DPR）
 const CHROME_CANDIDATES = [
   'C:/Users/admin/AppData/Local/Google/Chrome/Application/chrome.exe',
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -20,7 +21,9 @@ const PROFILE = path.join(os.tmpdir(), 'cdchrome_shot_' + Date.now());
 const chrome = spawn(CHROME, [
   '--headless=new', `--remote-debugging-port=${PORT}`,
   '--no-first-run', '--no-default-browser-check',
-  `--user-data-dir=${PROFILE}`, '--disable-gpu', '--window-size=750,1334',
+  `--user-data-dir=${PROFILE}`, '--disable-gpu',
+  `--window-size=${750 * DPR},${1334 * DPR}`,
+  `--force-device-scale-factor=${DPR}`,
   'about:blank',
 ], { stdio: 'ignore' });
 process.on('exit', () => { try { chrome.kill(); } catch {} });

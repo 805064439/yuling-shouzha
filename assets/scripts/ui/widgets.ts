@@ -292,13 +292,14 @@ export function shadeHex(hex: string, t: number): string {
 // ─────────────────────────────────────────────────────────────
 const SPRITE_TYPE_SLICED = 1; // Sprite.SpriteType.SLICED（web-mobile 构建不导出该枚举，用数值）
 
-// 九宫格面板切图加载（1x 图：ink/paper 120×120 border 16pt；deep 96×96 border 14pt）
+// 九宫格面板切图加载（1x 图：ink/paper 120×120 border 32；deep 96×96 border 28）
+// R4：border 16 不足以包住面板圆角（大面板拉扁弧线），按切图包文档对齐 32/28。
 // 注意：本项目 PNG 按 texture 类型导入（无 spriteFrame 子资源，与立绘同坑），
 // 因此加载 Texture2D 后运行时包成 SpriteFrame 并设置 insetBorder。
 const panelSfCache: Record<string, SpriteFrame> = {};
 export function loadUiFrame(name: string): Promise<SpriteFrame | null> {
     if (panelSfCache[name]) return Promise.resolve(panelSfCache[name]);
-    const border = name === 'ui_panel_deep' ? 14 : 16;
+    const border = name === 'ui_panel_deep' ? 28 : 32;
     const toFrame = (tex: Texture2D | null): SpriteFrame | null => {
         if (!tex) return null;
         const frame = new SpriteFrame();
@@ -613,11 +614,16 @@ export function attachClick(node: Node, cb: () => void): void {
 // ⚠️ ui_panel_ink/paper/deep 不在此表——它们只能走 makePanel / loadUiFrame。
 // ─────────────────────────────────────────────────────────────
 export const UI_BORDER: Record<string, number> = {
-    ui_panel_status: 22,
-    ui_bar_hp_bg: 16, ui_bar_hp_fill: 16,
-    ui_bar_unit_bg: 7, ui_bar_unit_fill: 7,
+    // ⚠️ SLICED 三条铁律（R4 实锤）：
+    // 1) border ≥ 图的圆角半径，否则角区包不住弧线、弧被拉扁（status 22→32 修扁弧）；
+    // 2) 胶囊图（半圆端）border = 图高/2，且渲染高度必须 = 原图高（上下 border 恰好相接、
+    //    无中间带、端部原样）——渲染高度被压缩时上下 border 重叠 → 渲染未定义（fill 鼓形凸出即此）；
+    // 3) 渲染高度 > 原图高时中间带被拉伸，border×2 必须留足中间带。
+    ui_panel_status: 32,
+    ui_bar_hp_bg: 20, ui_bar_hp_fill: 20,   // 80×40 胶囊：渲染高恒 40
+    ui_bar_unit_bg: 7, ui_bar_unit_fill: 7, // 48×14 胶囊：渲染高恒 14
     ui_chip_hp: 12, ui_mask_dead: 14,
-    ui_nav_bar: 24, ui_btn_nav_off: 22, ui_btn_nav_on: 22,
+    ui_nav_bar: 32, ui_btn_nav_off: 24, ui_btn_nav_on: 24,
     ui_badge_wave: 18,
     ui_btn_primary: 24, ui_btn_primary_pressed: 24,
     ui_btn_plain: 24, ui_btn_plain_pressed: 24,

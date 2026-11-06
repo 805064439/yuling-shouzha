@@ -46,7 +46,8 @@ function makeUnitBar(
   color: string,
   deadText: string,
 ): UnitBar {
-  const barW = slotW - 24;
+  // R4 P1-1：血条两端不得压纸框内沿——宽 = 舞台宽 − 2×(纸框边 12 + 6px 留白)
+  const barW = slotW - 36;
   const barH = 14;
   const barY = -slotH / 2 + 16;
   const bg = makeUiSprite(stage, 'ui_bar_unit_bg', barW, barH, '#141C1E');
@@ -66,7 +67,7 @@ function makeUnitBar(
   setSize(num, 92, 20);
   num.setPosition(0, 0, 1);
 
-  const mask = makeUiSprite(stage, 'ui_mask_dead', slotW - 20, 44, '#141C1E');
+  const mask = makeUiSprite(stage, 'ui_mask_dead', slotW - 36, 44, '#141C1E');
   mask.name = 'unitDeadMask';
   mask.setPosition(0, 0, 4);
   makeLabel(mask, deadText, { fontSize: 18, color: COLORS.text });
@@ -138,17 +139,21 @@ export function buildBattle(root: Node, gm: GameManager): void {
   waveLbl.setPosition(0, 0, 1);
 
   // ④ 敌方总血条：墨面底槽 + 白色填充（运行时染三态）
-  // fill 内缩 2px（616×36）：与 bg 造型贴合成一套，不再凸出底条边缘
+  // R4 实锤：fill/bg 是半圆胶囊图（80×40，半径 20），SLICED border=20 时
+  // 渲染高度必须 = 原图高 40（压缩会让上下 border 重叠 → 鼓形凸出），
+  // 故 fill 与 bg 齐平 620×40；左对齐收缩时右侧露出 bg 深色形成「槽内填充」。
   const hpBg = makeUiSprite(root, 'ui_bar_hp_bg', 620, 40, '#141C1E');
   hpBg.setPosition(0, 480, 0);
-  const FILL_W = 616;
-  const FILL_H = 36;
+  const FILL_W = 620;
+  const FILL_H = 40;
   const hpFill = makeUiSprite(hpBg, 'ui_bar_hp_fill', FILL_W, FILL_H, '#FFFFFF');
   hpFill.setPosition(0, 0, 1);
   tintUiSprite(hpFill, hpColor(startWave));
-  const hpLbl = makeLabel(hpBg, `敌方 · ${tierLabel(startWave)}`, { fontSize: 20, color: COLORS.text });
-  setSize(hpLbl, 620, 26);
-  hpLbl.setPosition(0, 0, 2);
+  // R4 P1-2：关底名牌上移 34px 脱离血条 y 带（fill 不再被名牌叠盖）；
+  // 字号 18 保证最坏 14 字时文字右缘 ~116 < 徽章左缘 130，不撞波次徽章
+  const hpLbl = makeLabel(hpBg, `敌方 · ${tierLabel(startWave)}`, { fontSize: 18, color: COLORS.text });
+  setSize(hpLbl, 620, 24);
+  hpLbl.setPosition(0, 34, 2);
 
   // 金线分隔（普通 Sprite 横向拉伸，不做九宫格）
   makeUiSprite(root, 'ui_divider_gold', 620, 4, COLORS.gold).setPosition(0, 448, 0);
