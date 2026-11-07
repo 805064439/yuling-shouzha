@@ -190,13 +190,13 @@ export function buildBattle(root: Node, gm: GameManager): void {
   RES.forEach(([icon, get], i) => {
     const x = -116 + i * 124;
     makeUi3Sprite(status, icon, 28, 33).setPosition(x - 26, 0, 1);
-    const num = makeLabel(status, get(), { fontSize: 20, color: JADE.goldText, align: 0 });
+    const num = makeLabel(status, get(), { fontSize: 18, color: JADE.goldText, align: 0 });
     const nut = num.getComponent(UITransform) as any;
     nut.anchorX = 0; // 左对齐锚点：文字只向右生长
     const lab = num.getComponent('cc.Label') as any;
     lab.overflow = 2; // 2 = SHRINK：超宽自动缩字号（web-mobile 不导出枚举，用数值）
-    setSize(num, 84, 26);
-    num.setPosition(x - 2, 0, 1); // 图标右缘 x-12 + 10px 间距（R2 P1-5：4→10px）；
+    setSize(num, 80, 26);
+    num.setPosition(x + 4, 0, 1); // 图标右缘 x-12，净距 16px（R3 P2-1：方章光晕外扩，再右移一档）；
     // 限宽 84：下组图标左缘 = x+84，再宽 SHRINK 后的长数字右缘会压进下一组图标
     resLabels.push(num);
   });
@@ -287,10 +287,13 @@ export function buildBattle(root: Node, gm: GameManager): void {
   allyRow.setPosition(0, 0, 0);
 
   const slots: Record<string, Node> = {}; // attackerId → 立绘节点（出手高亮）
+  // 出手高亮（R3 建议）：只放大卡内立绘子节点 'spirit'，金框/布局不动——
+  // 旧版整卡 1.15 会让相邻卡视觉贴连（真机实测间隙 60→16px）
   const bump = (n: Node | undefined): void => {
-    if (!n || !n.isValid) return;
-    n.setScale(1.15, 1.15, 1);
-    setTimeout(() => { if (n.isValid) n.setScale(1, 1, 1); }, 380);
+    const sp = n && n.isValid ? n.getChildByName('spirit') : null;
+    if (!sp) return;
+    sp.setScale(1.15, 1.15, 1);
+    setTimeout(() => { if (sp.isValid) sp.setScale(1, 1, 1); }, 380);
   };
 
   const team = s.team || [];
@@ -358,9 +361,12 @@ export function buildBattle(root: Node, gm: GameManager): void {
     (logLabel.getComponent('cc.Label') as any).string = lines.slice(-5).join('\n');
   };
 
-  // ⑥ 日志与导航之间的收边（R2 P2-6）：金线 + 一行静态小字（装饰宁少勿多，只此两件）
-  makeUi3Sprite(root, 'deco_divider_gold', 620, 14).setPosition(0, -470, 0);
-  makeLabel(root, '· 蚀灵教 ·', { fontSize: 15, color: JADE.sub }).setPosition(0, -493, 0);
+  // ⑥ 日志与导航之间的收边（R2 P2-6 / R3 P2-2 提对比度）：
+  // 金线 tint 加深一档（浅云雾底上原色若隐若现）；小字换深墨绿（对比 ≈5.5:1）
+  const divider = makeUi3Sprite(root, 'deco_divider_gold', 620, 14);
+  divider.setPosition(0, -470, 0);
+  tintUiSprite(divider, '#B89355');
+  makeLabel(root, '· 蚀灵教 ·', { fontSize: 16, color: '#4A5A48' }).setPosition(0, -493, 0);
 
   const syncBars = (): void => {
     battle.enemies.forEach((u, i) => { if (enemyBars[i]) enemyBars[i].update(u); });
