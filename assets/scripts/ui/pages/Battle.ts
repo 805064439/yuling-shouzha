@@ -8,7 +8,6 @@
 // R1（翡翠包真机验收）修正：
 //  · 立绘窗口 = 金框内窗（frame_spirit_card 内窗 x11-186 y11-197）；
 //  · 单位血条三件套按色系直选（chip_hp_*/bar_fill_*/plate_name_*），渲染高=源高防端头压缩；
-//  · 敌方总血条 = panel_section_jade 620×44（实心深绿槽，fill 22 高居中）；
 //  · 卡内窗垫 card_plate_cloud 染稀有度/梯队色（alpha 150），金框本身绝不染色。
 // R6（美术评审 血条与立绘占位）修正：
 //  · 内窗中心 cy 原写 -22（与注释「偏上 22」符号相反）→ 立绘整体下移 44 设计px，改 +14；
@@ -16,6 +15,13 @@
 //    出手放大允许溢出框外；
 //  · 单位血条新增 bar_track_dark 中性空槽 + fill 改 FILLED 按 fillRange 裁切，
 //    解决 SLICED 在 w<20 时左右 cap 重叠退化。主体色号 #F9875E 系保持不变。
+// R7（美术评审 切图重出）修正：
+//  · R5 误判更正：panel_status 的 3 条横贯金带不是源图自带，是早期擦文字时横向亮度 lerp
+//    把金色数字摊成全宽色带的伪影；已从原始切片重抠干净底图，覆盖即生效。
+//  · 敌方总血条由单层 panel_section_jade 拆成三层：hp_total_bg 墨绿底(0) →
+//    bar_fill_*(1) → hp_total_deco 金饰(2)；金饰独立节点、不随 fill 拉伸。
+//  · 高度常量 UNIT_FILL_H 21/21/19→14/14/13、track +4k→+10k、HP_FILL_H 22→16，
+//    让 fill 上下露出墨绿槽。四块状态栏数字胶囊按待确认项**暂保留**。
 
 import { Node, UITransform, Graphics, Color, tween } from 'cc';
 import type { GameManager } from '../GameManager';
@@ -88,7 +94,8 @@ interface UnitBar {
  * z 序：track(0) < fill(1) < plate(2) < chip(3) < 死亡遮罩(4)。节点名保留 unitHp* 供端到端探针统计。
  */
 const UNIT_CHIP_H = 28;   // chip_hp_* 源高（red 132×28 / green 125×30 / gold 119×28）
-const UNIT_FILL_H: Record<'red' | 'gold' | 'green', number> = { red: 21, gold: 21, green: 19 };
+// R7：21/21/19 → 14/14/13，配合 track 加高让 fill 上下各露约 5px 墨绿槽（容器感）
+const UNIT_FILL_H: Record<'red' | 'gold' | 'green', number> = { red: 14, gold: 14, green: 13 };
 const UNIT_PLATE_H = 26;  // 名牌渲染高（源 32 压 0.81，竖 cap 20 ≤ 26 合法）
 
 function makeUnitBar(
@@ -114,7 +121,7 @@ function makeUnitBar(
   const fillH = UNIT_FILL_H[color] * k;
   const barW = Math.min(132 * k, cardW - 44);
   const innerW = barW - 4; // fill 相对空槽左右各内缩 2px
-  const track = makeUi3Sprite(stage, 'bar_track_dark', barW, fillH + 4 * k);
+  const track = makeUi3Sprite(stage, 'bar_track_dark', barW, fillH + 10 * k); // R7：+4k→+10k
   track.name = 'unitHpTrack';
   track.setPosition(0, -85 * k, 0); // z=0：垫在 fill 下
   const fill = makeUi3Sprite(stage, `bar_fill_${color}`, innerW, fillH, 3 /* FILLED */);
@@ -195,10 +202,12 @@ export function buildBattle(root: Node, gm: GameManager): void {
   // 四组货币 = 「图标 + 金色数字」单行（对齐仿真图；状态栏高 70 塞不下三层）
   // R1 验收 P1-5：数字 Label 左对齐（锚点 x=0、从图标右缘起排）+ SHRINK 限宽，
   // 七八位数（如 53251926）自动缩字，不再回压图标。
-  // R5 美术评审 问题1 方案A：panel_status 源图自带 3 条横贯金带（实测 y16/40/68），
-  // 渲染 729×70 后中间那条正好穿过数字行 → 每组数字下垫深墨绿胶囊遮带，
-  // 数字 #E8C87E→#F5DFA0 + 1px #1E2A2E 描边（3.8.2+ Label 原生描边），对比 2.5:1→≈5:1。
-  // 不改已确认的 panel_status 素材本身。
+  // R7 更正：R5 判定「panel_status 源图自带 3 条横贯金带」是错的——那是早期擦除
+  // 烘焙文字时用横向亮度 lerp 把金色数字摊成全宽色带留下的重建伪影；原始切片
+  // s1_00 中间 x=500 列只有连续深墨绿渐变 + 上下各一条细金边。现 panel_status
+  // 已从原始切片就地重抠（878×84 / alpha / .meta 不变），金带根治、覆盖即生效。
+  // 数字仍沿用 R5 方案 A 的 #F5DFA0 + 1px #1E2A2E 描边（3.8.2+ Label 原生描边）。
+  // 四块深墨绿胶囊属 R7 待确认项，金带消失后已非必需，但仍属用户确认过的设计，暂保留。
   const status = makeUi3Sprite(root, 'panel_status', 729, 70);
   status.setPosition(0, 622, 0);
   const RES: Array<[string, () => string]> = [
@@ -260,14 +269,16 @@ export function buildBattle(root: Node, gm: GameManager): void {
   const waveLbl = makeLabel(badge, `第 ${startWave} 波`, { fontSize: 22, color: JADE.goldText });
   waveLbl.setPosition(0, 0, 1);
 
-  // ④ 敌方总血条（R2 P0-2 方案 B）：bg 换 panel_section_jade（深绿实心+两端金菱，全高实心），
-  // fill=bar_fill_red/gold 22 高居中嵌在槽内——结构简单不再有上下条带对位问题。
-  // 旧 bar_thick_green 方案废弃：绿条区在源图顶部、米白托板在下，fill y 符号算反导致红条压托板。
+  // ④ 敌方总血条（R7 三层重做）：
+  //  层1 hp_total_bg 纯墨绿底槽(0) / 层2 bar_fill_* 橘色血量(1) / 层3 hp_total_deco 金饰(2)
+  // 旧单层 panel_section_jade 把金线与底槽烘焙在一起，fill 变宽时金饰要么被盖、
+  // 要么随 SLICED 一起拉伸、端饰不稳。现在金饰是独立节点、恒尺寸、压在最上，
+  // 满血/残血两态完全一致。R7 高度：fill 22→16，占槽高 36%（原 50% 太满像贴色带）。
   const HPBG_W = 620;
   const HP_INNER_W = 586; // fill 最大宽 590 − 左右内缩 2px×2
-  const HP_FILL_H = 22;
+  const HP_FILL_H = 16;
   const HP_FILL_Y = 0;
-  const hpBg = makeUi3Sprite(root, 'panel_section_jade', HPBG_W, 44);
+  const hpBg = makeUi3Sprite(root, 'hp_total_bg', HPBG_W, 44);
   hpBg.name = 'ui_bar_hp_bg'; // 端到端探针兼容
   hpBg.setPosition(0, 495, 0);
   const hpFillR = makeUi3Sprite(hpBg, 'bar_fill_red', HP_INNER_W, HP_FILL_H);
@@ -277,6 +288,10 @@ export function buildBattle(root: Node, gm: GameManager): void {
   hpFillG.name = 'ui_bar_hp_fill_gold';
   hpFillG.setPosition(0, HP_FILL_Y, 1);
   hpFillG.active = false;
+  // 层3：金色修饰（连续上下金线 + 两端金菱卷云），透明底、恒尺寸、z=2 压在 fill 之上
+  const hpDeco = makeUi3Sprite(hpBg, 'hp_total_deco', HPBG_W, 44);
+  hpDeco.name = 'ui_bar_hp_deco';
+  hpDeco.setPosition(0, 0, 2);
 
   // 「敌方 · 梯队 · 蚀灵教」标题独立行（R1 验收 P1-3：删珊瑚粉横幅，文案并入此处；
   // 不压条、不与右侧金色波次徽章重叠）

@@ -749,6 +749,8 @@ export const UI3_BORDER: Record<string, [number, number, number, number]> = {
     panel_status: [70, 12, 70, 12],
     panel_title_coral: [40, 16, 40, 16],
     panel_section_jade: [60, 10, 60, 10],
+    // R7 总血条三层：底槽与金饰必须同尺寸、同 border、同位置，否则金线与底槽端头错位
+    hp_total_bg: [60, 10, 60, 10], hp_total_deco: [60, 10, 60, 10],
     panel_jade_large: [30, 30, 30, 30],
     panel_log_wide: [40, 14, 40, 14],
     panel_info_jade: [24, 24, 24, 24],
@@ -767,7 +769,9 @@ function ui3Subdir(name: string): string {
     if (name.startsWith('panel_')) return 'panels';
     if (name.startsWith('frame_') || name.startsWith('card_')) return 'frames';
     if (name.startsWith('button_')) return 'buttons';
-    if (name.startsWith('bar_') || name.startsWith('chip_') || name.startsWith('plate_')) return 'bars';
+    // R7：hp_total_bg / hp_total_deco 放在 ui3/bars/，但前缀是 hp_ 不是 bar_，
+    // 不显式映射会落到 decorations 导致 resources.load 404、节点永远没有 Sprite（首屏空窗）。
+    if (name.startsWith('bar_') || name.startsWith('chip_') || name.startsWith('plate_') || name.startsWith('hp_')) return 'bars';
     if (name.startsWith('tab_')) return 'tabs';
     if (name.startsWith('icon_')) return 'icons';
     return 'decorations';
@@ -803,6 +807,7 @@ export function loadUi3Frame(name: string): Promise<SpriteFrame | null> {
 export const UI3_NAMES = [
     'bg_spirit_realm_main',
     'panel_status', 'panel_title_coral', 'panel_section_jade', 'panel_jade_large',
+    'hp_total_bg', 'hp_total_deco', // R7 三层血条，预载防首屏空窗
     'button_wave',
     'chip_hp_red', 'chip_hp_gold', 'chip_hp_green',
     'bar_fill_red', 'bar_fill_gold', 'bar_fill_green',
