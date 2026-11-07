@@ -130,7 +130,7 @@ function makeUnitBar(
   const chip = makeUi3Sprite(stage, `chip_hp_${color}`, chipW, chipH);
   chip.name = 'unitHpChip';
   chip.setPosition(0, -62 * k, 3);
-  const num = makeLabel(chip, '', { fontSize: Math.max(14, Math.round(16 * k)), color: JADE.chipNum });
+  const num = makeLabel(chip, '', { fontSize: Math.max(16, Math.round(18 * k)), color: JADE.chipNum }); // R14 A4
   num.name = 'unitHpNum';
   setSize(num, chipW - 14, chipH - 4);
   num.setPosition(0, 0, 1);
@@ -273,8 +273,8 @@ export function buildBattle(root: Node, gm: GameManager): void {
 
   // ② 进度行（R1 验收 P2-7：删「历史最高 X 波」——波次动态信息唯一出处=金色徽章；
   // 「主角 Lv」从资源栏移入本行（P1-5）。当前波超过纪录时提示「新纪录！」）
-  const progressLbl = makeLabel(root, '', { fontSize: 17, color: JADE.sub });
-  setSize(progressLbl, 660, 22);
+  const progressLbl = makeLabel(root, '', { fontSize: 19, color: '#DDE6D2' }); // R14 A3：17→19、就地提亮；JADE 常量不动
+  setSize(progressLbl, 660, 26);
   progressLbl.setPosition(-40, 575, 0);
   const refreshProgress = (ev?: BattleEvent): void => {
     const kills = ev && ev.kills !== undefined ? ev.kills : battle.kills;
@@ -299,7 +299,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
   // 满血/残血两态完全一致。R7 高度：fill 22→16，占槽高 36%（原 50% 太满像贴色带）。
   const HPBG_W = 620;
   const HP_INNER_W = 586; // fill 最大宽 590 − 左右内缩 2px×2
-  const HP_FILL_H = 16;
+  const HP_FILL_H = 20; // R14 A2：16→20，fill 占槽 36.4%→45%（不回到 R7 否过的 22）
   const HP_FILL_Y = 0;
   const hpBg = makeUi3Sprite(root, 'hp_total_bg', HPBG_W, 44);
   hpBg.name = 'ui_bar_hp_bg'; // 端到端探针兼容
@@ -326,15 +326,17 @@ export function buildBattle(root: Node, gm: GameManager): void {
   // R13 F1（解除 R1「不压条」旧约束）：标题叠在总血条图层之上、落进血条带内部，
   // 名字与血槽合成一个组件；上檐金线留作血条上方的独立屋檐层（hpEave 620 / y=25.5 不动）。
   // 挂 hpBg 且创建顺序在 deco / eave 之后 → 压在 bg / fill / deco / eave 之上。
+  // R14 A1：旧 SHRINK 把短文字缩到 0.55×；改 NONE + 显式行高，fill 加高后描边同步 1→2px。
   const hpLbl = makeLabel(hpBg, `敌方 · ${tierLabel(startWave)} · 蚀灵教`,
-    { fontSize: 17, color: '#FFF8E8' }); // makeLabel 默认 align = 1 (CENTER)
-  setSize(hpLbl, 620, 22);                // 与 HPBG_W 齐宽
+    { fontSize: 20, color: '#FFF8E8' }); // makeLabel 默认 align = 1 (CENTER)
+  setSize(hpLbl, 620, 26);                // 与 HPBG_W 齐宽，高 22 → 26
   hpLbl.setPosition(0, 0, 0);             // 相对 hpBg 中心，绝对 y=495，血条带正中
   const hl = hpLbl.getComponent('cc.Label') as any;
-  hl.overflow = 2;                        // SHRINK，长关卡名不溢出
-  hl.enableOutline = true;                // 亮 fill 上靠 1px 深描边勾轮廓
+  hl.lineHeight = 24;                     // 显式行高，别让默认值撑高节点
+  hl.overflow = 0;                        // NONE；绝不能用 2 (SHRINK)
+  hl.enableOutline = true;
   hl.outlineColor = hexToColor('#1E2A2E');
-  hl.outlineWidth = 1;
+  hl.outlineWidth = 2;
 
   // —— 敌方编队（蚀灵教）：每只怪一张金框卡 ——
   const enemyRow = new Node('enemyRow');
@@ -398,8 +400,8 @@ export function buildBattle(root: Node, gm: GameManager): void {
   const sideTab = makeUi3Sprite(root, 'tab_side', 40, 92, 0 /* SIMPLE */);
   sideTab.setPosition(-330, rowYs[0], 0);
   ['我', '方'].forEach((ch, i) => {
-    const lab = makeLabel(sideTab, ch, { fontSize: 16, color: JADE.goldText });
-    setSize(lab, 40, 24);
+    const lab = makeLabel(sideTab, ch, { fontSize: 17, color: JADE.goldText }); // R14 A6
+    setSize(lab, 40, 26);
     lab.setPosition(0, i === 0 ? 18 : -18, 1);
     const lc = lab.getComponent('cc.Label') as any;
     lc.enableOutline = true;
@@ -552,7 +554,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
     // R10 M4：战斗页 gm.current 不等于任何 NAV key，五枚全走非 active 分支，
     // 原 JADE.sub(#C2D0BC) 对真机底只有 3.26:1 → 统一金色 #E8C87E（≈4.94:1）+ 原生描边。
     // active 态仍只靠 btn.setScale(1.06) 区分，不加第二套色。
-    const navLbl = makeLabel(btn, label, { fontSize: 16, color: JADE.goldText });
+    const navLbl = makeLabel(btn, label, { fontSize: 17, color: JADE.goldText }); // R14 A5：五枚统一 +1
     navLbl.setPosition(0, -18, 1);
     const navLab = navLbl.getComponent('cc.Label') as any;
     navLab.enableOutline = true; // LabelOutline 组件自 3.8.2 废弃，用 Label 原生属性
