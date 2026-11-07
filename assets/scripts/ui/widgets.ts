@@ -812,6 +812,10 @@ export const UI3_NAMES = [
     'chip_hp_red', 'chip_hp_gold', 'chip_hp_green',
     'bar_fill_red', 'bar_fill_gold', 'bar_fill_green',
     'bar_track_dark', // R6 新增中性空槽，预载防首屏空窗
+    // R10 单位血条端头帽（3 色）+ 总血条上檐金线；名字含 _v1 一个字都不能省。
+    // 四张图都不进 UI3_BORDER → SIMPLE，加了会退化成 SLICED 圆头/端饰变形。
+    'bar_fill_cap_red_v1', 'bar_fill_cap_gold_v1', 'bar_fill_cap_green_v1',
+    'hp_total_eave_v1',
     'bar_thick_green',
     'plate_name_gold', 'plate_name_red', 'plate_name_green',
     'frame_spirit_card', 'card_plate_cloud',

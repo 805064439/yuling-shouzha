@@ -28,6 +28,11 @@
 //    直接落在干净墨绿底上（对比 ≈4.8:1），四枚深色方章继续保留。
 //  · P2 方案 A：名牌中心 -107*k→-110*k，track 底缘 -97*k 与名牌顶缘 -97*k 不再重叠，
 //    单位血条下槽恢复到 ≈5 设计px、上下对称。
+// R10（整合指示 M1–M4）修正：
+//  · 单位血条补端头帽 bar_fill_cap_{color}_v1：fill 缩短 fillRange 留出帽宽、圆头帽贴切线右侧，
+//    满血/残血两态右端同族；极窄血量降级不贴帽。capW 随 innerW 与源图宽换算，非固定 20。
+//  · 总血条增第 4 层 hp_total_eave_v1 上翘金檐线：620 宽 SIMPLE、恒尺寸（不随 ratio 变化）。
+//  · 底部导航文字统一 #E8C87E + 1px #1E2A2E 原生描边（原 #C2D0BC 真机仅 3.26:1）。
 
 import { Node, UITransform, Graphics, Color, tween } from 'cc';
 import type { GameManager } from '../GameManager';
@@ -89,21 +94,26 @@ interface UnitBar {
 }
 
 /**
- * 金框卡牌单位血条四件套（R1 验收 P0-2 重构 → R6 血条专项重做）：
+ * 金框卡牌单位血条五件套（R1 验收 P0-2 重构 → R6 血条专项重做 → R10 端头帽）：
  *  · chip_hp_{color} 血量数字胶囊：渲染高 = 源高×k（≥1 只拉伸不压缩，端头不变形）；
  *  · bar_track_dark 中性深墨绿圆头空槽（R6 新增）：垫在 fill 下，残血右侧有槽承接；
  *  · bar_fill_{color} 进度条：FILLED 恒满宽圆头胶囊，只改 fillRange 裁右端；
  *    旧实现按 ratio 用 setSize 变宽，bar_fill_* 是 SLICED 左右 cap 各 10px，
  *    w<20 时两 cap 重叠退化成锥形端头（真机「墨傀使 76/668」）。
+ *  · bar_fill_cap_{color}_v1（R10 新增）：圆头帽贴在 fill 硬切线右侧，
+ *    capW = 20 × innerW / 源图宽、capH = fillH；极窄血量与死亡态隐藏。
  *  · plate_name_{color} 名牌缎带：卡底舌位，怪名上移进名牌内（不再被卡框挡住）。
- * 240 高卡纵向布局（y 自上而下）：chip -62(28) → track/fill -85(24/14) → plate -110(26)=贴卡底。
- * z 序：track(0) < fill(1) < plate(2) < chip(3) < 死亡遮罩(4)。节点名保留 unitHp* 供端到端探针统计。
+ * 240 高卡纵向布局（y 自上而下）：chip -62(28) → track/fill/cap -85(24/14) → plate -110(26)=贴卡底。
+ * 创建顺序（Cocos 2D 真正决定层级）：track < fill < cap < plate < chip < 死亡遮罩。
+ * 节点名保留 unitHp* 供端到端探针统计。
  */
 const UNIT_CHIP_H = 28;   // chip_hp_* 源高（red 132×28 / green 125×30 / gold 119×28）
 // R7：21/21/19 → 14/14/13，配合 track 加高让 fill 上下各露约 5px 墨绿槽（容器感）
 // R8：名牌 -107*k→-110*k 后下槽才真正露出 5px（原名牌顶缘 -94*k 把 track 底 -96*k 吃掉 2k）
 const UNIT_FILL_H: Record<'red' | 'gold' | 'green', number> = { red: 14, gold: 14, green: 13 };
 const UNIT_PLATE_H = 26;  // 名牌渲染高（源 32 压 0.81，竖 cap 20 ≤ 26 合法）
+// R10：bar_fill_* 源图宽（端头帽源宽 20，须按同一横向压缩系数换算，不能用 20×21 恒贴）
+const UNIT_CAP_SRC_W: Record<'red' | 'gold' | 'green', number> = { red: 160, gold: 147, green: 153 };
 
 function makeUnitBar(
   stage: Node,
@@ -134,6 +144,12 @@ function makeUnitBar(
   const fill = makeUi3Sprite(stage, `bar_fill_${color}`, innerW, fillH, 3 /* FILLED */);
   fill.name = 'unitHpFill';
   fill.setPosition(0, -85 * k, 1); // z=1：顶藏入胶囊后；底缘 -92*k → 名牌顶缘 -97*k 留 ≈5k 下槽（R8）
+  // R10 端头帽：FILLED 的切线落在实色中段会成直角平切，缩短 fillRange 留出帽宽后
+  // 把圆头帽贴在切线右侧。SIMPLE 显式传 0，不随 ratio 拉伸；创建顺序在 fill 后 / plate 前。
+  const capW = 20 * innerW / UNIT_CAP_SRC_W[color];
+  const cap = makeUi3Sprite(stage, `bar_fill_cap_${color}_v1`, capW, fillH, 0 /* SIMPLE */);
+  cap.name = 'unitHpCap';
+  cap.setPosition(0, -85 * k, 2);
   // ④ 名牌缎带（卡底舌位，底缘贴卡底；怪名移进名牌内）
   const plateW = Math.min(206 * k, cardW - 20);
   const plate = makeUi3Sprite(stage, `plate_name_${color}`, plateW, UNIT_PLATE_H * k);
@@ -162,10 +178,15 @@ function makeUnitBar(
   return {
     update(u: Unit) {
       const ratio = u.maxHp > 0 ? Math.max(0, Math.min(1, u.hp / u.maxHp)) : 0;
-      // 节点恒为 innerW 满宽圆头胶囊，只按血量裁右端：左端圆头恒定、右端平切，
-      // 且 w<20 时不存在 SLICED cap 重叠退化。
-      setUi3FillRange(fill, ratio);
-      fill.active = !u.dead;
+      // R10：满血也走同一套「缩短 fill + 贴帽」路径，两态造型才同族（不设满血隐藏分支）。
+      // 目标右端 = -innerW/2 + shownW；fill 只画到它左侧 capW 处，圆头帽接住硬切线。
+      const shownW = innerW * ratio;
+      const showCap = shownW >= capW + 4; // 极窄态降级：帽子比整条血还宽会左右叠影
+      setUi3FillRange(fill, showCap ? (shownW - capW) / innerW : ratio); // 传 0..1 比例
+      if (showCap) cap.setPosition(-innerW / 2 + shownW - capW / 2, -85 * k, 2);
+      const showBar = !u.dead && ratio > 0;
+      fill.active = showBar;
+      cap.active = showBar && showCap;
       track.active = !u.dead;
       chip.active = !u.dead; // 「已击败」只显示一处：死亡隐藏胶囊、条与空槽，保留中央遮罩
       (num.getComponent('cc.Label') as any).string = u.dead
@@ -293,6 +314,13 @@ export function buildBattle(root: Node, gm: GameManager): void {
   const hpDeco = makeUi3Sprite(hpBg, 'hp_total_deco', HPBG_W, 44);
   hpDeco.name = 'ui_bar_hp_deco';
   hpDeco.setPosition(0, 0, 2);
+  // 层4（R10 M3）：上翘金檐线，独立纯装饰层，不随 ratio 变化（满血/空血恒尺寸恒位置）。
+  // 宽度口径见整合指示 C2：源图 520 只是素材画布宽，渲染宽必须 = HPBG_W(620) 与 bg/deco 齐宽；
+  // 「恒尺寸」= 不随血量变化，不是不按卡宽定尺寸。显式 0 = SIMPLE（不进 UI3_BORDER，
+  // 否则中央菱形会被九宫格连同中段一起拉宽）。创建顺序在 deco 之后 → 渲染在其上。
+  const hpEave = makeUi3Sprite(hpBg, 'hp_total_eave_v1', HPBG_W, 33, 0 /* SIMPLE */);
+  hpEave.name = 'ui_bar_hp_eave';
+  hpEave.setPosition(0, 25.5, 3); // 唯一真机可微调项（+18~+26）；若压标题只能下调
 
   // 「敌方 · 梯队 · 蚀灵教」标题独立行（R1 验收 P1-3：删珊瑚粉横幅，文案并入此处；
   // 不压条、不与右侧金色波次徽章重叠）
@@ -501,9 +529,15 @@ export function buildBattle(root: Node, gm: GameManager): void {
     btn.name = 'btn'; // 与旧 makeButton 同名：端到端脚本按 name==='btn' 找导航
     btn.setPosition(x, -560, 0);
     if (active) btn.setScale(1.06, 1.06, 1); // 当前页：按钮微放大 + label 金色
-    makeLabel(btn, label, {
-      fontSize: 16, color: active ? JADE.goldText : JADE.sub,
-    }).setPosition(0, -18, 1);
+    // R10 M4：战斗页 gm.current 不等于任何 NAV key，五枚全走非 active 分支，
+    // 原 JADE.sub(#C2D0BC) 对真机底只有 3.26:1 → 统一金色 #E8C87E（≈4.94:1）+ 原生描边。
+    // active 态仍只靠 btn.setScale(1.06) 区分，不加第二套色。
+    const navLbl = makeLabel(btn, label, { fontSize: 16, color: JADE.goldText });
+    navLbl.setPosition(0, -18, 1);
+    const navLab = navLbl.getComponent('cc.Label') as any;
+    navLab.enableOutline = true; // LabelOutline 组件自 3.8.2 废弃，用 Label 原生属性
+    navLab.outlineColor = hexToColor('#1E2A2E');
+    navLab.outlineWidth = 1;
     attachClick(btn, () => gm.go(key));
   });
 
