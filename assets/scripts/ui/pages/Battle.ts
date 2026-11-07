@@ -11,7 +11,7 @@
 //  · 敌方总血条 = bar_thick_green（绿条区在源图 y5-23，渲染 54 高时 fill 中心 y≈-15、恒高 15）；
 //  · 卡内窗垫 card_plate_cloud 染稀有度/梯队色（alpha 150），金框本身绝不染色。
 
-import { Node, UITransform } from 'cc';
+import { Node, UITransform, Graphics, Color } from 'cc';
 import type { GameManager } from '../GameManager';
 import { Battle } from '../../logic/Battle';
 import type { BattleEvent, Unit } from '../../logic/Battle';
@@ -21,17 +21,19 @@ import { enemyResPath } from '../../logic/Enemies';
 import { stageForWave, isBossWave, isEliteWave } from '../../logic/Difficulty';
 import { RARITY_COLOR } from '../../logic/GameConfig';
 import {
-  makeLabel, makeSpirit, setSize,
-  makeUiSprite, makeUi3Sprite, tintUiSprite, attachClick,
+  makeLabel, makeSpirit, setSize, newNode, hexToColor,
+  makeUi3Sprite, tintUiSprite, attachClick,
 } from '../widgets';
 
 // 金框卡牌（frame_spirit_card 197×254 等比缩放；立绘窗口 = 内窗 165×176，中心偏上 22）
+// R2 P1-3：两排网格卡缩至 164×211（k=0.88）+ 敌行上移 320→338（敌卡底 218），
+// 排1 顶 209 与敌名牌底间隙 9、排2 底 -234 与日志顶间隙 6——纵向满排布且与敌区零重叠。
 const ENEMY_CARD = { w: 186, h: 240 }; // 敌方 3 卡
 const HERO_CARD = { w: 240, h: 310 };  // count=1 主角大卡（设计意图）
 const CARD_2 = { w: 210, h: 271 };
-const CARD_3 = { w: 186, h: 240 };
-const ALLY_CARD = { w: 186, h: 240 };  // ≥4 两行网格
-const ALLY_ROW_Y = [140, -110]; // 我方两行的纵坐标（单行时动态求安全位）
+const CARD_3 = { w: 164, h: 211 };
+const ALLY_CARD = { w: 164, h: 211 };  // ≥4 两行网格
+const ALLY_ROW_Y = [104, -129]; // 排1 [−1.5,209] 排2 [−234.5,−23.5]，排间隙 22 设计px
 /** 内窗尺寸/中心（以 240 高卡为基准，按 cardH/240 等比换算） */
 const INNER = { w: 158, h: 176, cy: -22 };
 
@@ -109,10 +111,22 @@ function makeUnitBar(
   const nameLbl = makeLabel(plate, unitName, { fontSize: Math.max(13, Math.round(15 * k)), color: JADE.namePlate });
   setSize(nameLbl, plateW - 34, UNIT_PLATE_H * k - 8);
   nameLbl.setPosition(0, 0, 1);
-  // ⑤ 死亡遮罩（旧 ui/ 切图：卡片中央红描边「已击败/倒下」）
-  const mask = makeUiSprite(stage, 'ui_mask_dead', slotSafeW(cardW), 44, '#141C1E');
-  mask.name = 'unitDeadMask';
+  // ⑤ 死亡遮罩（R2 P0-1 重做：弃旧 ui_mask_dead 黑块——纯 Graphics 深绿半透明+金描边，
+  // 节点永不为 Sprite，不触发「先 Graphics 后 Sprite 永不渲染」陷阱；文字「已击败/倒下」补回）
+  const mask = newNode('unitDeadMask', stage);
+  const mw = slotSafeW(cardW);
+  setSize(mask, mw, 44);
   mask.setPosition(0, 0, 4);
+  const mg = mask.addComponent(Graphics);
+  mg.fillColor = new Color(30, 42, 46, 200); // #1E2A2E alpha 200，米白文字对比 ≈9:1
+  mg.roundRect(-mw / 2, -22, mw, 44, 12);
+  mg.fill();
+  mg.lineWidth = 3;
+  mg.strokeColor = hexToColor(JADE.goldText);
+  mg.roundRect(-mw / 2 + 1.5, -20.5, mw - 3, 41, 11);
+  mg.stroke();
+  const deadLbl = makeLabel(mask, deadText, { fontSize: 20, color: '#FFF8E8' });
+  deadLbl.setPosition(0, 0, 1);
   mask.active = false;
 
   return {
@@ -131,11 +145,14 @@ function makeUnitBar(
   };
 }
 
-/** 卡内窗稀有度/梯队色垫底（R1 验收 P1-4）：card_plate_cloud 染色，只垫底绝不染金框 */
-function makeCardBackdrop(card: Node, cardW: number, cardH: number, hex: string): void {
-  const k = cardH / 240;
-  const back = makeUi3Sprite(card, 'card_plate_cloud', INNER.w * k, INNER.h * k);
-  back.setPosition(0, INNER.cy * k, 0);
+/** 卡内窗稀有度/梯队色垫底（R2 P1-4 改整卡铺设）：
+ * card_plate_cloud 是内窗不透明的实底卡版，整卡铺满后内窗露出染色云纹（无露白），
+ * 自带金边区域被上层 frame_spirit_card 的不透明金边盖住。
+ * ⚠️ 必须做成 card 的**兄弟节点**且先于 card 添加——Cocos 子节点永远渲染在父之上，
+ * 若作为 card 的子节点整卡铺会把金框盖住。 */
+function makeCardBackdrop(parent: Node, x: number, y: number, cardW: number, cardH: number, hex: string): void {
+  const back = makeUi3Sprite(parent, 'card_plate_cloud', cardW, cardH);
+  back.setPosition(x, y, 0);
   tintUiSprite(back, hex, 150);
 }
 
@@ -178,8 +195,9 @@ export function buildBattle(root: Node, gm: GameManager): void {
     nut.anchorX = 0; // 左对齐锚点：文字只向右生长
     const lab = num.getComponent('cc.Label') as any;
     lab.overflow = 2; // 2 = SHRINK：超宽自动缩字号（web-mobile 不导出枚举，用数值）
-    setSize(num, 88, 26);
-    num.setPosition(x - 8, 0, 1); // 图标右缘 x-12 + 6px 间距
+    setSize(num, 84, 26);
+    num.setPosition(x - 2, 0, 1); // 图标右缘 x-12 + 10px 间距（R2 P1-5：4→10px）；
+    // 限宽 84：下组图标左缘 = x+84，再宽 SHRINK 后的长数字右缘会压进下一组图标
     resLabels.push(num);
   });
   const refreshInfo = (): void => {
@@ -210,14 +228,14 @@ export function buildBattle(root: Node, gm: GameManager): void {
   const waveLbl = makeLabel(badge, `第 ${startWave} 波`, { fontSize: 22, color: JADE.goldText });
   waveLbl.setPosition(0, 0, 1);
 
-  // ④ 敌方总血条：bar_thick_green（绿条+金菱端+米白托板）+ bar_fill 三色切换（普通红/精英教主金）
-  // 源图实测（alpha/色彩扫描）：绿条区在源图 y5-23，渲染 54 高（×0.84）时条区中心 y≈-15、高≈15，
-  // fill 恒高 15 恰好嵌进条区；宽 580 两端各留 20px 避让金菱端头。只变宽、左对齐。
+  // ④ 敌方总血条（R2 P0-2 方案 B）：bg 换 panel_section_jade（深绿实心+两端金菱，全高实心），
+  // fill=bar_fill_red/gold 22 高居中嵌在槽内——结构简单不再有上下条带对位问题。
+  // 旧 bar_thick_green 方案废弃：绿条区在源图顶部、米白托板在下，fill y 符号算反导致红条压托板。
   const HPBG_W = 620;
-  const HP_INNER_W = 580;
-  const HP_FILL_H = 15;
-  const HP_FILL_Y = -15;
-  const hpBg = makeUi3Sprite(root, 'bar_thick_green', HPBG_W, 54);
+  const HP_INNER_W = 586; // fill 最大宽 590 − 左右内缩 2px×2
+  const HP_FILL_H = 22;
+  const HP_FILL_Y = 0;
+  const hpBg = makeUi3Sprite(root, 'panel_section_jade', HPBG_W, 44);
   hpBg.name = 'ui_bar_hp_bg'; // 端到端探针兼容
   hpBg.setPosition(0, 495, 0);
   const hpFillR = makeUi3Sprite(hpBg, 'bar_fill_red', HP_INNER_W, HP_FILL_H);
@@ -237,7 +255,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
   // —— 敌方编队（蚀灵教）：每只怪一张金框卡 ——
   const enemyRow = new Node('enemyRow');
   root.addChild(enemyRow);
-  enemyRow.setPosition(0, 320, 0);
+  enemyRow.setPosition(0, 338, 0); // R2 P1-3：320→338，给下方两排卡让出与敌区零重叠的空间
   const enemySlots: Node[] = []; // 敌方出手高亮用（下标 = 敌方编队下标）
   let enemyBars: UnitBar[] = [];
   const renderEnemies = (team: EnemyDef[]): void => {
@@ -249,10 +267,10 @@ export function buildBattle(root: Node, gm: GameManager): void {
     const ek = ENEMY_CARD.h / 240;
     team.forEach((e, i) => {
       const x = (i - (n - 1) / 2) * gap;
+      // 稀有度垫底（P1-4）：兄弟节点先铺，梯队色阶染色云纹整卡衬底
+      makeCardBackdrop(enemyRow, x, 0, ENEMY_CARD.w, ENEMY_CARD.h, TIER_STAGE[e.tier] || TIER_STAGE[1]);
       const card = makeUi3Sprite(enemyRow, 'frame_spirit_card', ENEMY_CARD.w, ENEMY_CARD.h);
       card.setPosition(x, 0, 0);
-      // 稀有度垫底（P1-4）：梯队色阶染色云纹衬，只垫内窗、绝不染金框
-      makeCardBackdrop(card, ENEMY_CARD.w, ENEMY_CARD.h, TIER_STAGE[e.tier] || TIER_STAGE[1]);
       // 立绘放内窗（中心偏上 22×k），clip 硬裁剪兜底：任何立绘都不许出框（P0-1）
       makeSpirit(card, enemyResPath(e.id), INNER.w * ek, '❓', INNER.h * ek, 1, true)
         .setPosition(0, INNER.cy * ek, 0);
@@ -280,9 +298,9 @@ export function buildBattle(root: Node, gm: GameManager): void {
   const SLOT = count === 1 ? HERO_CARD : count === 2 ? CARD_2 : CARD_3;
   const singleRow = count <= 3;
   const perRow = singleRow ? count : Math.ceil(count / 2);
-  // 单行布局：卡顶不得超过敌方卡行下沿（敌卡底 = 320 - 120 = 200，留 16px 余量），
+  // 单行布局：卡顶不得超过敌方卡行下沿（敌卡底 = 338 - 120 = 218，留 16px 余量），
   // 否则主角大卡会压住敌方卡牌（R3 确认 bug 的同款约束）。
-  const ALLY_TOP_SAFE = 184;
+  const ALLY_TOP_SAFE = 202;
   const rowYs = singleRow ? [ALLY_TOP_SAFE - SLOT.h / 2] : ALLY_ROW_Y;
   const rowCounts = singleRow ? [count] : [perRow, count - perRow];
   const gapX = SLOT.w + 22;
@@ -300,9 +318,9 @@ export function buildBattle(root: Node, gm: GameManager): void {
   const ak = SLOT.h / 240;
   // 主角卡（立绘：spirits/protagonist.png，设定=执笔育灵师·小椿；垫底=灵气金）
   const [hx, hy] = allyPos(0);
+  makeCardBackdrop(allyRow, hx, hy, SLOT.w, SLOT.h, '#e0a93f');
   const heroCard = makeUi3Sprite(allyRow, 'frame_spirit_card', SLOT.w, SLOT.h);
   heroCard.setPosition(hx, hy, 0);
-  makeCardBackdrop(heroCard, SLOT.w, SLOT.h, '#e0a93f');
   makeSpirit(heroCard, 'spirits/protagonist', INNER.w * ak, '🌸', INNER.h * ak, 1, true)
     .setPosition(0, INNER.cy * ak, 0);
   allyBars.push(makeUnitBar(heroCard, SLOT.w, SLOT.h, 'green', '主角·小椿', '倒下'));
@@ -311,10 +329,10 @@ export function buildBattle(root: Node, gm: GameManager): void {
   team.forEach((id, i) => {
     const sp = SPIRIT_BY_ID[id];
     const [x, y] = allyPos(i + 1);
+    // 稀有度垫底（P1-4）：GameConfig 稀有度四色原值，alpha 150
+    makeCardBackdrop(allyRow, x, y, SLOT.w, SLOT.h, sp ? RARITY_COLOR[sp.rarity] : '#9aa0a6');
     const card = makeUi3Sprite(allyRow, 'frame_spirit_card', SLOT.w, SLOT.h);
     card.setPosition(x, y, 0);
-    // 稀有度垫底（P1-4）：GameConfig 稀有度四色原值，alpha 150
-    makeCardBackdrop(card, SLOT.w, SLOT.h, sp ? RARITY_COLOR[sp.rarity] : '#9aa0a6');
     makeSpirit(card, sp ? spiritResPath(sp, s.prog?.[id]?.evo ?? 0) : '', INNER.w * ak, sp?.icon ?? '❓', INNER.h * ak, 1, true)
       .setPosition(0, INNER.cy * ak, 0);
     allyBars.push(makeUnitBar(card, SLOT.w, SLOT.h, 'green', sp?.name ?? '???', '倒下'));
@@ -322,22 +340,27 @@ export function buildBattle(root: Node, gm: GameManager): void {
   });
 
   // —— 战斗日志：panel_jade_large 深绿云纹大面板（自带金双边框）——
+  // R2 P1-3/P2-6：面板 160→186 高、y -320→-333（给两排卡让出排距，同时吃掉下方空白）
   // 文字顶锚（anchorY=1）+ SHRINK：多行只向下生长且超行自动缩字号
-  const logPanel = makeUi3Sprite(root, 'panel_jade_large', 660, 160);
-  logPanel.setPosition(0, -320, 0);
+  const logPanel = makeUi3Sprite(root, 'panel_jade_large', 660, 186);
+  logPanel.setPosition(0, -333, 0);
   const logLabel = makeLabel(logPanel, `${tierLabel(startWave)} · 挂机战斗中…`, { fontSize: 18, color: JADE.body, wrapWidth: 600 });
   const logLab = logLabel.getComponent('cc.Label') as any;
   logLab.overflow = 2; // 2 = Overflow.SHRINK（web-mobile 构建不导出枚举，用数值）
   logLab.lineHeight = 27;
-  setSize(logLabel, 600, 118);
+  setSize(logLabel, 600, 132);
   (logLabel.getComponent(UITransform) as any).anchorY = 1;
-  logLabel.setPosition(0, 62, 1);
+  logLabel.setPosition(0, 72, 1);
   logSink = (msg: string) => {
     const cur = (logLabel.getComponent('cc.Label') as any).string || '';
     const lines = cur.split('\n').filter(Boolean);
     lines.push(msg);
     (logLabel.getComponent('cc.Label') as any).string = lines.slice(-5).join('\n');
   };
+
+  // ⑥ 日志与导航之间的收边（R2 P2-6）：金线 + 一行静态小字（装饰宁少勿多，只此两件）
+  makeUi3Sprite(root, 'deco_divider_gold', 620, 14).setPosition(0, -470, 0);
+  makeLabel(root, '· 蚀灵教 ·', { fontSize: 15, color: JADE.sub }).setPosition(0, -493, 0);
 
   const syncBars = (): void => {
     battle.enemies.forEach((u, i) => { if (enemyBars[i]) enemyBars[i].update(u); });
@@ -353,6 +376,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
     }
     hpFillR.active = !gold;
     hpFillG.active = gold;
+    console.log(`[ylsz] enemyRatio=${Math.min(1, ratio).toFixed(3)} wave=${wave} gold=${gold}`); // R2：真机核对语义（剩余HP/总HP）
   };
 
   const onTick = (ev: BattleEvent) => {
