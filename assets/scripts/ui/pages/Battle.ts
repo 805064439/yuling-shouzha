@@ -6,10 +6,16 @@
 // 背景/状态栏/波次徽章/总血条/金框卡/血条三色/名牌/导航按钮均为切图，
 // 三色血条用切图直选（red=敌/普怪、gold=精英/教主、green=我方），不再运行时染色。
 // R1（翡翠包真机验收）修正：
-//  · 立绘窗口 = 金框内窗（frame_spirit_card 内窗 x11-186 y11-197），中心偏上 22，clip 硬裁剪兜底；
+//  · 立绘窗口 = 金框内窗（frame_spirit_card 内窗 x11-186 y11-197）；
 //  · 单位血条三件套按色系直选（chip_hp_*/bar_fill_*/plate_name_*），渲染高=源高防端头压缩；
 //  · 敌方总血条 = panel_section_jade 620×44（实心深绿槽，fill 22 高居中）；
 //  · 卡内窗垫 card_plate_cloud 染稀有度/梯队色（alpha 150），金框本身绝不染色。
+// R6（美术评审 血条与立绘占位）修正：
+//  · 内窗中心 cy 原写 -22（与注释「偏上 22」符号相反）→ 立绘整体下移 44 设计px，改 +14；
+//  · 三处立绘 fitScale 1→1.20、clip true→false：R1「绝不出框」铁律经用户授权正式撤销，
+//    出手放大允许溢出框外；
+//  · 单位血条新增 bar_track_dark 中性空槽 + fill 改 FILLED 按 fillRange 裁切，
+//    解决 SLICED 在 w<20 时左右 cap 重叠退化。主体色号 #F9875E 系保持不变。
 
 import { Node, UITransform, Graphics, Color, tween } from 'cc';
 import type { GameManager } from '../GameManager';
@@ -22,10 +28,10 @@ import { stageForWave, isBossWave, isEliteWave } from '../../logic/Difficulty';
 import { RARITY_COLOR } from '../../logic/GameConfig';
 import {
   makeLabel, makeSpirit, setSize, newNode, hexToColor,
-  makeUi3Sprite, tintUiSprite, attachClick,
+  makeUi3Sprite, tintUiSprite, setUi3FillRange, attachClick,
 } from '../widgets';
 
-// 金框卡牌（frame_spirit_card 197×254 等比缩放；立绘窗口 = 内窗 165×176，中心偏上 22）
+// 金框卡牌（frame_spirit_card 197×254 等比缩放；立绘窗口 = 内窗 158×176，中心偏上 14）
 // R2 P1-3：两排网格卡缩至 164×211（k=0.88）+ 敌行上移 320→338（敌卡底 218），
 // 排1 顶 209 与敌名牌底间隙 9、排2 底 -234 与日志顶间隙 6——纵向满排布且与敌区零重叠。
 const ENEMY_CARD = { w: 186, h: 240 }; // 敌方 3 卡
@@ -34,8 +40,12 @@ const CARD_2 = { w: 210, h: 271 };
 const CARD_3 = { w: 164, h: 211 };
 const ALLY_CARD = { w: 164, h: 211 };  // ≥4 两行网格
 const ALLY_ROW_Y = [104, -129]; // 排1 [−1.5,209] 排2 [−234.5,−23.5]，排间隙 22 设计px
-/** 内窗尺寸/中心（以 240 高卡为基准，按 cardH/240 等比换算） */
-const INNER = { w: 158, h: 176, cy: -22 };
+/** 内窗尺寸/中心（以 240 高卡为基准，按 cardH/240 等比换算）
+ * R6：cy 符号修正。源图内窗中心实测比卡中心高 ≈22 设计px（cocos y 向上为正），
+ * 旧值 -22 等于把立绘整体下移 44px → 头顶大片留白、脚被血量胶囊切掉。
+ * 取 +14 而非 +22：给 fitScale 1.20 的放大留余量，避免我方第一排卡顶溢出后
+ * 与敌方卡底（间隙仅 8.5 设计px）交叠。 */
+const INNER = { w: 158, h: 176, cy: 14 };
 
 /** 翡翠色板（README §4 文字规范） */
 const JADE = {
@@ -67,12 +77,15 @@ interface UnitBar {
 }
 
 /**
- * 金框卡牌单位血条三件套（R1 验收 P0-2 重构）：
+ * 金框卡牌单位血条四件套（R1 验收 P0-2 重构 → R6 血条专项重做）：
  *  · chip_hp_{color} 血量数字胶囊：渲染高 = 源高×k（≥1 只拉伸不压缩，端头不变形）；
- *  · bar_fill_{color} 进度条：恒高、只按 ratio 变宽、左对齐，fill 顶/底各藏入相邻件 ~2px；
+ *  · bar_track_dark 中性深墨绿圆头空槽（R6 新增）：垫在 fill 下，残血右侧有槽承接；
+ *  · bar_fill_{color} 进度条：FILLED 恒满宽圆头胶囊，只改 fillRange 裁右端；
+ *    旧实现按 ratio 用 setSize 变宽，bar_fill_* 是 SLICED 左右 cap 各 10px，
+ *    w<20 时两 cap 重叠退化成锥形端头（真机「墨傀使 76/668」）。
  *  · plate_name_{color} 名牌缎带：卡底舌位，怪名上移进名牌内（不再被卡框挡住）。
- * 240 高卡纵向布局（y 自上而下）：chip -62(28) → fill -85(21) → plate -107(26)=贴卡底。
- * z 序：fill(1) < plate(2) < chip(3) < 死亡遮罩(4)。节点名保留 unitHp* 供端到端探针统计。
+ * 240 高卡纵向布局（y 自上而下）：chip -62(28) → track/fill -85(21) → plate -107(26)=贴卡底。
+ * z 序：track(0) < fill(1) < plate(2) < chip(3) < 死亡遮罩(4)。节点名保留 unitHp* 供端到端探针统计。
  */
 const UNIT_CHIP_H = 28;   // chip_hp_* 源高（red 132×28 / green 125×30 / gold 119×28）
 const UNIT_FILL_H: Record<'red' | 'gold' | 'green', number> = { red: 21, gold: 21, green: 19 };
@@ -97,13 +110,16 @@ function makeUnitBar(
   num.name = 'unitHpNum';
   setSize(num, chipW - 14, chipH - 4);
   num.setPosition(0, 0, 1);
-  // ③ 进度条（fill 即条，参考图无底槽；残血右侧留空）
+  // ③ 进度条（R6 P0）：空槽垫底 + fill 恒满宽 FILLED 裁切，窄宽不再退化
   const fillH = UNIT_FILL_H[color] * k;
   const barW = Math.min(132 * k, cardW - 44);
-  const innerW = barW - 4; // fill 内缩 2px×2
-  const fill = makeUi3Sprite(stage, `bar_fill_${color}`, barW, fillH);
+  const innerW = barW - 4; // fill 相对空槽左右各内缩 2px
+  const track = makeUi3Sprite(stage, 'bar_track_dark', barW, fillH + 4 * k);
+  track.name = 'unitHpTrack';
+  track.setPosition(0, -85 * k, 0); // z=0：垫在 fill 下
+  const fill = makeUi3Sprite(stage, `bar_fill_${color}`, innerW, fillH, 3 /* FILLED */);
   fill.name = 'unitHpFill';
-  fill.setPosition(0, -85 * k, 1); // z=1 最底：顶藏入胶囊后、底藏入名牌后
+  fill.setPosition(0, -85 * k, 1); // z=1：顶藏入胶囊后、底藏入名牌后
   // ④ 名牌缎带（卡底舌位，底缘贴卡底；怪名移进名牌内）
   const plateW = Math.min(206 * k, cardW - 20);
   const plate = makeUi3Sprite(stage, `plate_name_${color}`, plateW, UNIT_PLATE_H * k);
@@ -132,11 +148,12 @@ function makeUnitBar(
   return {
     update(u: Unit) {
       const ratio = u.maxHp > 0 ? Math.max(0, Math.min(1, u.hp / u.maxHp)) : 0;
-      const w = Math.max(1, ratio * innerW);
-      setSize(fill, w, fillH); // 高度恒 = 源高×k，只变宽
-      fill.setPosition(-innerW / 2 + w / 2, -85 * k, 1); // 左对齐：居中锚点公式
+      // 节点恒为 innerW 满宽圆头胶囊，只按血量裁右端：左端圆头恒定、右端平切，
+      // 且 w<20 时不存在 SLICED cap 重叠退化。
+      setUi3FillRange(fill, ratio);
       fill.active = !u.dead;
-      chip.active = !u.dead; // 「已击败」只显示一处：死亡隐藏胶囊与条，保留中央遮罩
+      track.active = !u.dead;
+      chip.active = !u.dead; // 「已击败」只显示一处：死亡隐藏胶囊、条与空槽，保留中央遮罩
       (num.getComponent('cc.Label') as any).string = u.dead
         ? deadText
         : `${Math.max(0, Math.floor(u.hp))}/${u.maxHp}`;
@@ -286,8 +303,9 @@ export function buildBattle(root: Node, gm: GameManager): void {
       makeCardBackdrop(enemyRow, x, 0, ENEMY_CARD.w, ENEMY_CARD.h, TIER_STAGE[e.tier] || TIER_STAGE[1]);
       const card = makeUi3Sprite(enemyRow, 'frame_spirit_card', ENEMY_CARD.w, ENEMY_CARD.h);
       card.setPosition(x, 0, 0);
-      // 立绘放内窗（中心偏上 22×k），clip 硬裁剪兜底：任何立绘都不许出框（P0-1）
-      makeSpirit(card, enemyResPath(e.id), INNER.w * ek, '❓', INNER.h * ek, 1, true)
+      // 立绘放内窗（中心偏上 14×k），fitScale 1.20 填满内窗；R6 起撤销 clip 硬裁剪，
+      // 用户已授权「攻击放大溢出框外可接受」，金框/布局保持不动
+      makeSpirit(card, enemyResPath(e.id), INNER.w * ek, '❓', INNER.h * ek, 1.20, false)
         .setPosition(0, INNER.cy * ek, 0);
       // 三色语义：长老/教主 gold，普通 red
       const color: 'red' | 'gold' = e.tier >= 3 ? 'gold' : 'red';
@@ -307,7 +325,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
   const bump = (n: Node | undefined): void => {
     const sp = n && n.isValid ? n.getChildByName('spirit') : null;
     if (!sp) return;
-    sp.setScale(1.15, 1.15, 1);
+    sp.setScale(1.20, 1.20, 1); // R6：关掉 clip 后放大才真正溢出金框（仍是 380ms 瞬态）
     setTimeout(() => { if (sp.isValid) sp.setScale(1, 1, 1); }, 380);
   };
 
@@ -339,7 +357,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
   makeCardBackdrop(allyRow, hx, hy, SLOT.w, SLOT.h, '#e0a93f');
   const heroCard = makeUi3Sprite(allyRow, 'frame_spirit_card', SLOT.w, SLOT.h);
   heroCard.setPosition(hx, hy, 0);
-  makeSpirit(heroCard, 'spirits/protagonist', INNER.w * ak, '🌸', INNER.h * ak, 1, true)
+  makeSpirit(heroCard, 'spirits/protagonist', INNER.w * ak, '🌸', INNER.h * ak, 1.20, false)
     .setPosition(0, INNER.cy * ak, 0);
   allyBars.push(makeUnitBar(heroCard, SLOT.w, SLOT.h, 'green', '主角·小椿', '倒下'));
   slots['__hero'] = heroCard;
@@ -351,7 +369,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
     makeCardBackdrop(allyRow, x, y, SLOT.w, SLOT.h, sp ? RARITY_COLOR[sp.rarity] : '#9aa0a6');
     const card = makeUi3Sprite(allyRow, 'frame_spirit_card', SLOT.w, SLOT.h);
     card.setPosition(x, y, 0);
-    makeSpirit(card, sp ? spiritResPath(sp, s.prog?.[id]?.evo ?? 0) : '', INNER.w * ak, sp?.icon ?? '❓', INNER.h * ak, 1, true)
+    makeSpirit(card, sp ? spiritResPath(sp, s.prog?.[id]?.evo ?? 0) : '', INNER.w * ak, sp?.icon ?? '❓', INNER.h * ak, 1.20, false)
       .setPosition(0, INNER.cy * ak, 0);
     allyBars.push(makeUnitBar(card, SLOT.w, SLOT.h, 'green', sp?.name ?? '???', '倒下'));
     slots[id] = card;

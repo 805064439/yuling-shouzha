@@ -757,6 +757,7 @@ export const UI3_BORDER: Record<string, [number, number, number, number]> = {
     button_wave: [66, 12, 66, 12],
     chip_hp_red: [16, 10, 16, 10], chip_hp_gold: [16, 10, 16, 10], chip_hp_green: [16, 10, 16, 10],
     bar_fill_red: [10, 6, 10, 6], bar_fill_gold: [10, 6, 10, 6], bar_fill_green: [10, 6, 10, 6],
+    bar_track_dark: [13, 0, 13, 0], // R6 新增：中性深墨绿圆头空槽，左右 cap 13、上下不九宫格
     plate_name_red: [36, 10, 36, 10], plate_name_gold: [36, 10, 36, 10], plate_name_green: [36, 10, 36, 10],
     bar_thick_green: [14, 14, 14, 14],
 };
@@ -805,6 +806,7 @@ export const UI3_NAMES = [
     'button_wave',
     'chip_hp_red', 'chip_hp_gold', 'chip_hp_green',
     'bar_fill_red', 'bar_fill_gold', 'bar_fill_green',
+    'bar_track_dark', // R6 新增中性空槽，预载防首屏空窗
     'bar_thick_green',
     'plate_name_gold', 'plate_name_red', 'plate_name_green',
     'frame_spirit_card', 'card_plate_cloud',
@@ -819,9 +821,14 @@ export function preloadUi3(): Promise<void> {
 }
 
 /** ui3 切图节点：有 border 走 SLICED(1)，无 border 走 SIMPLE(0)。
- * 安全模式同 makeUiSprite：无 Graphics 兜底，空等切图就绪。 */
+ * 安全模式同 makeUiSprite：无 Graphics 兜底，空等切图就绪。
+ * R6：第 5 参数 spriteType 可覆盖渲染类型（3 = FILLED，单位血条用），
+ * 避免「按 ratio 变宽 + 左右 cap 各 10px」在 w<20 时九宫格退化、端头畸变。
+ * ⚠️ 覆盖必须在 apply 内完成：切图异步就绪时 apply 晚于函数返回，
+ *    返回后再写 sp.type 会被这里静默覆盖回去。 */
 export function makeUi3Sprite(
     parent: Node, name: string, w: number, h: number,
+    spriteType?: number,
 ): Node {
     const n = newNode(name, parent);
     setSize(n, w, h);
@@ -829,10 +836,17 @@ export function makeUi3Sprite(
         if (!n.isValid) return;
         let sp = n.getComponent(Sprite);
         if (!sp) sp = n.addComponent(Sprite);
-        sp.type = UI3_BORDER[name] ? 1 : 0; // 1 = SLICED, 0 = SIMPLE
-        sp.sizeMode = 0;                    // 0 = CUSTOM
+        const type = spriteType !== undefined ? spriteType : (UI3_BORDER[name] ? 1 : 0);
+        sp.type = type;      // 0 = SIMPLE, 1 = SLICED, 3 = FILLED
+        sp.sizeMode = 0;     // 0 = CUSTOM
         sp.trim = false;
         sp.spriteFrame = sf;
+        if (type === 3) {
+            // FILLED：横向从左向右裁切（枚举在 web-mobile 不导出，一律用数值）
+            sp.fillType = 0;  // 0 = HORIZONTAL
+            sp.fillStart = 0;
+            sp.fillRange = n['_fillRange'] !== undefined ? n['_fillRange'] : 1;
+        }
         if (n['_tintColor']) sp.color = n['_tintColor'];
         else if (n['_tintHex']) sp.color = hexToColor(n['_tintHex']);
     };
@@ -843,4 +857,13 @@ export function makeUi3Sprite(
         loadUi3Frame(name).then((sf) => { if (sf) apply(sf); });
     }
     return n;
+}
+
+/** R6：FILLED 血条按血量比例裁切（节点恒为满宽圆头胶囊，不再 setSize 变宽）。
+ * 暂存 _fillRange，切图异步就绪时 apply 也能还原到正确比例。 */
+export function setUi3FillRange(n: Node, ratio: number): void {
+    const r = Math.max(0, Math.min(1, ratio));
+    n['_fillRange'] = r;
+    const sp = n.getComponent(Sprite);
+    if (sp) sp.fillRange = r;
 }
