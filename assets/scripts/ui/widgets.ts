@@ -16,6 +16,7 @@ import {
     UITransform,
     Graphics,
     Color,
+    Mask,
     resources,
     dynamicAtlasManager,
 } from 'cc';
@@ -538,9 +539,11 @@ const INITIAL_BBOX: Record<string, [number, number]> = {
 };
 
 /**
- * 小卡片立绘的视觉尺寸补偿系数（1.00 ~ 1.25）。
+ * 小卡片立绘的视觉尺寸补偿系数（1.00 ~ 1.10）。
  * 按外框 contain 后的主体显示面积，向「外框短边² × 0.60」的目标面积靠拢；
- * 只放大不缩小（进化形态本来就更大），并限制在 1.25 以内避免溢出卡片。
+ * 只放大不缩小（进化形态本来就更大）。
+ * ⚠️ R1（翡翠包）验收：上限从 1.25 收紧到 1.10——打孔金框时代放大超出内窗
+ * 会直接穿帮（立绘压到相邻卡/盖住自家血条），宁可统一偏小也不许出框。
  */
 export function spiritFitScale(resPath: string, frameW: number, frameH: number): number {
   const id = resPath.split('/').pop() || '';
@@ -556,12 +559,14 @@ export function spiritFitScale(resPath: string, frameW: number, frameH: number):
   const area = Math.max(sw * sh, 1);
   const short = Math.min(frameW, frameH);
   const target = short * short * 0.60;
-  return Math.max(1, Math.min(1.25, Math.sqrt(target / area)));
+  return Math.max(1, Math.min(1.10, Math.sqrt(target / area)));
 }
 
 // 立绘节点：外框恒定 size×size（保证网格/卡片布局整齐），内部 pic 子节点按原图
 // 宽高比 contain 等比缩放（立绘多为 2:3 竖版，若直接缩放外框会导致同排卡片大小不一）。
 // 加载失败时按 UI_DEBUG.emojiFallback 决定是否显示 emoji 兜底。
+// clip=true 时给外框加矩形 Mask 硬裁剪（R1 验收 P0-1：打孔金框内窗时代，
+// 立绘任何参数组合都不允许溢出外框——contain 已保证不超，Mask 是第二保险）。
 export function makeSpirit(
     parent: Node,
     resPath: string,
@@ -569,10 +574,17 @@ export function makeSpirit(
     fallbackEmoji: string,
     frameH?: number, // 可选外框高度：详情页等需要竖向大图时用（外框仍恒定，布局用）
     fitScale = 1,    // 可选视觉尺寸补偿：小卡片里让宽扁角色与其他角色看起来一样大
+    clip = false,    // 可选硬裁剪：battle 打孔金框卡内立绘开启
 ): Node {
     const n = newNode('spirit', parent);
     const H = frameH && frameH > 0 ? frameH : size;
     setSize(n, size, H); // 外框恒定：布局定位用它，不随图片比例变化
+    if (clip) {
+        // Mask.Type.RECT = 0（web-mobile 构建不导出枚举，用数值）；
+        // 只裁子节点（pic/emoji），外框尺寸即裁剪窗口
+        const mask = n.addComponent(Mask);
+        mask.type = 0;
+    }
     const em = makeLabel(n, fallbackEmoji, { fontSize: Math.floor(Math.min(size, H) * 0.5) });
     em.setPosition(0, 0, 0);
     if (!UI_DEBUG.emojiFallback) em.active = false; // 正式版：不显示 emoji 兜底
@@ -698,8 +710,9 @@ export function makeUiSprite(
         sp.sizeMode = 0;                    // CUSTOM：按 contentSize 拉伸
         sp.trim = false;
         sp.spriteFrame = sf;
-        // 异步创建的 Sprite 之前可能被 tintUiSprite 预约过染色
-        if (n['_tintHex']) sp.color = hexToColor(n['_tintHex']);
+        // 异步创建的 Sprite 之前可能被 tintUiSprite 预约过染色（_tintColor 含 alpha）
+        if (n['_tintColor']) sp.color = n['_tintColor'];
+        else if (n['_tintHex']) sp.color = hexToColor(n['_tintHex']);
     };
     const cached = homeSfCache[name];
     if (cached) {
@@ -711,11 +724,14 @@ export function makeUiSprite(
 }
 
 /** 白色填充图染色（乘算）：血条三态、我方/敌方血条共用。
- * Sprite 可能由 makeUiSprite 异步创建——未创建时把色值存到节点上，apply 时补染。 */
-export function tintUiSprite(n: Node, hex: string): void {
+ * Sprite 可能由 makeUiSprite 异步创建——未创建时把色值存到节点上，apply 时补染。
+ * alpha（0~255）可选：稀有度垫底等半透明染色用（R1 验收 P1-4）。 */
+export function tintUiSprite(n: Node, hex: string, alpha = 255): void {
+    const c = hexToColor(hex);
+    if (alpha !== 255) c.a = alpha;
     const sp = n.getComponent(Sprite);
-    if (sp) sp.color = hexToColor(hex);
-    else n['_tintHex'] = hex;
+    if (sp) sp.color = c;
+    else n['_tintColor'] = c; // 暂存完整色值（含 alpha），apply 时补染
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -789,8 +805,9 @@ export const UI3_NAMES = [
     'button_wave',
     'chip_hp_red', 'chip_hp_gold', 'chip_hp_green',
     'bar_fill_red', 'bar_fill_gold', 'bar_fill_green',
-    'plate_name_gold',
-    'frame_spirit_card',
+    'bar_thick_green',
+    'plate_name_gold', 'plate_name_red', 'plate_name_green',
+    'frame_spirit_card', 'card_plate_cloud',
     'button_nav_team', 'button_nav_gacha', 'button_nav_dex', 'button_nav_shop', 'button_nav_hero',
     'icon_stone', 'icon_jade', 'icon_talisman', 'icon_moon',
     'deco_divider_gold', 'deco_lotus_white', 'deco_cloud_a',
@@ -816,7 +833,8 @@ export function makeUi3Sprite(
         sp.sizeMode = 0;                    // 0 = CUSTOM
         sp.trim = false;
         sp.spriteFrame = sf;
-        if (n['_tintHex']) sp.color = hexToColor(n['_tintHex']);
+        if (n['_tintColor']) sp.color = n['_tintColor'];
+        else if (n['_tintHex']) sp.color = hexToColor(n['_tintHex']);
     };
     const cached = ui3SfCache[name];
     if (cached) {

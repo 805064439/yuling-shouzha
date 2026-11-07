@@ -104,7 +104,8 @@ async function main() {
       lines.push('HP_BG: '+(hpbg?dump(hpbg):'NOT_FOUND'));
       if(hpbg){lines.push('HP_FILL: '+dump(hpbg.children.find(c=>c.name==='ui_bar_hp_fill')||null));}
       const panels=find(ui,'panel');
-      const logPanel=panels[panels.length-1];
+      // 翡翠主题（R1）：日志面板节点名 = panel_jade_large（旧名 logPanel 已过期）
+      const logPanel=find(ui,'panel_jade_large')[0]||panels[panels.length-1];
       lines.push('LOG_PANEL: '+(logPanel?dump(logPanel):'NOT_FOUND'));
       if(logPanel){for(const c of logPanel.children)lines.push('  LOG_CHILD: '+dump(c));}
       const status=find(ui,'ui_panel_status')[0];
