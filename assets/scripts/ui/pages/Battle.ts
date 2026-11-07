@@ -178,6 +178,10 @@ export function buildBattle(root: Node, gm: GameManager): void {
   // 四组货币 = 「图标 + 金色数字」单行（对齐仿真图；状态栏高 70 塞不下三层）
   // R1 验收 P1-5：数字 Label 左对齐（锚点 x=0、从图标右缘起排）+ SHRINK 限宽，
   // 七八位数（如 53251926）自动缩字，不再回压图标。
+  // R5 美术评审 问题1 方案A：panel_status 源图自带 3 条横贯金带（实测 y16/40/68），
+  // 渲染 729×70 后中间那条正好穿过数字行 → 每组数字下垫深墨绿胶囊遮带，
+  // 数字 #E8C87E→#F5DFA0 + 1px #1E2A2E 描边（3.8.2+ Label 原生描边），对比 2.5:1→≈5:1。
+  // 不改已确认的 panel_status 素材本身。
   const status = makeUi3Sprite(root, 'panel_status', 729, 70);
   status.setPosition(0, 622, 0);
   const RES: Array<[string, () => string]> = [
@@ -190,14 +194,25 @@ export function buildBattle(root: Node, gm: GameManager): void {
   RES.forEach(([icon, get], i) => {
     const x = -116 + i * 124;
     makeUi3Sprite(status, icon, 28, 33).setPosition(x - 26, 0, 1);
-    const num = makeLabel(status, get(), { fontSize: 18, color: JADE.goldText, align: 0 });
+    // 数字底衬（独立 Graphics 节点，永不换 Sprite → 不踩「先 Graphics 后 Sprite 永不渲染」陷阱）；
+    // 树序 图标 < 胶囊 < 数字，胶囊遮住中金带且盖不住后一轮才添加的下一组图标。
+    const plate = newNode('resNumPlate', status);
+    plate.setPosition(x + 46, 0, 0);
+    const pg = plate.addComponent(Graphics);
+    pg.fillColor = new Color(30, 42, 46, 190); // #1E2A2E alpha 190
+    pg.roundRect(-46, -15, 92, 30, 8);
+    pg.fill();
+    const num = makeLabel(status, get(), { fontSize: 18, color: '#F5DFA0', align: 0 });
     const nut = num.getComponent(UITransform) as any;
     nut.anchorX = 0; // 左对齐锚点：文字只向右生长
     const lab = num.getComponent('cc.Label') as any;
     lab.overflow = 2; // 2 = SHRINK：超宽自动缩字号（web-mobile 不导出枚举，用数值）
+    lab.enableOutline = true; // LabelOutline 组件自 3.8.2 废弃，改用 Label 原生描边
+    lab.outlineColor = hexToColor('#1E2A2E');
+    lab.outlineWidth = 1;
     setSize(num, 80, 26);
     num.setPosition(x + 4, 0, 1); // 图标右缘 x-12，净距 16px（R3 P2-1：方章光晕外扩，再右移一档）；
-    // 限宽 84：下组图标左缘 = x+84，再宽 SHRINK 后的长数字右缘会压进下一组图标
+    // 限宽 80：下组图标左缘 = x+84，再宽 SHRINK 后的长数字右缘会压进下一组图标
     resLabels.push(num);
   });
   const refreshInfo = (): void => {
