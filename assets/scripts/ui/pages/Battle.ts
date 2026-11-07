@@ -8,10 +8,10 @@
 // R1（翡翠包真机验收）修正：
 //  · 立绘窗口 = 金框内窗（frame_spirit_card 内窗 x11-186 y11-197），中心偏上 22，clip 硬裁剪兜底；
 //  · 单位血条三件套按色系直选（chip_hp_*/bar_fill_*/plate_name_*），渲染高=源高防端头压缩；
-//  · 敌方总血条 = bar_thick_green（绿条区在源图 y5-23，渲染 54 高时 fill 中心 y≈-15、恒高 15）；
+//  · 敌方总血条 = panel_section_jade 620×44（实心深绿槽，fill 22 高居中）；
 //  · 卡内窗垫 card_plate_cloud 染稀有度/梯队色（alpha 150），金框本身绝不染色。
 
-import { Node, UITransform, Graphics, Color } from 'cc';
+import { Node, UITransform, Graphics, Color, tween } from 'cc';
 import type { GameManager } from '../GameManager';
 import { Battle } from '../../logic/Battle';
 import type { BattleEvent, Unit } from '../../logic/Battle';
@@ -373,16 +373,44 @@ export function buildBattle(root: Node, gm: GameManager): void {
     battle.allies.forEach((u, i) => { if (allyBars[i]) allyBars[i].update(u); });
   };
 
-  const setTotalHp = (ratio: number, wave: number): void => {
-    const w = Math.max(1, Math.min(1, ratio) * HP_INNER_W);
-    const gold = barFillName(wave) === 'bar_fill_gold';
+  // R4 可选 P2：总血条宽度 0.25s 缓动（每杀一只跳约 33%，把断崖式跳变抹平）。
+  // 规则：① 只缓动「下降」；换波回满（宽度增大）瞬时重置，否则会看到血条慢慢涨回来；
+  //      ② 每次新 tick 先停掉上一段，避免多段 tween 叠加写同一节点；
+  //      ③ 页面切换时 gm.cleanup 停 tween，防止回调写已销毁节点。
+  const hpAnim = { w: HP_INNER_W };
+  let hpCurW = HP_INNER_W;   // 当前显示宽度（含缓动中间值）
+  let hpTween: any = null;
+  const applyHpWidth = (w: number): void => {
+    const width = Math.max(1, w);
+    hpCurW = width;
     for (const f of [hpFillR, hpFillG]) {
-      setSize(f, w, HP_FILL_H);
-      f.setPosition(-HP_INNER_W / 2 + w / 2, HP_FILL_Y, 1); // 左对齐：居中锚点公式
+      if (!f.isValid) continue;
+      setSize(f, width, HP_FILL_H);
+      f.setPosition(-HP_INNER_W / 2 + width / 2, HP_FILL_Y, 1); // 左对齐：居中锚点公式
     }
+  };
+
+  const setTotalHp = (ratio: number, wave: number, snap = false): void => {
+    const target = Math.max(1, Math.min(1, ratio) * HP_INNER_W);
+    const gold = barFillName(wave) === 'bar_fill_gold';
     hpFillR.active = !gold;
     hpFillG.active = gold;
     console.log(`[ylsz] enemyRatio=${Math.min(1, ratio).toFixed(3)} wave=${wave} gold=${gold}`); // R2：真机核对语义（剩余HP/总HP）
+    if (hpTween) { hpTween.stop(); hpTween = null; }
+    // 进页首次 / 换波回满 / 无变化：瞬时定位，不做缓动
+    if (snap || target >= hpCurW - 0.5 || Math.abs(target - hpCurW) < 1) {
+      hpAnim.w = target;
+      applyHpWidth(target);
+      return;
+    }
+    hpAnim.w = hpCurW;
+    hpTween = tween(hpAnim)
+      .to(0.25, { w: target }, {
+        easing: 'sineOut',
+        onUpdate: () => { if (hpFillR.isValid) applyHpWidth(hpAnim.w); },
+        onComplete: () => { hpTween = null; },
+      })
+      .start();
   };
 
   const onTick = (ev: BattleEvent) => {
@@ -406,7 +434,7 @@ export function buildBattle(root: Node, gm: GameManager): void {
   renderEnemies(battle.enemyTeam);
   refreshProgress();
   syncBars();
-  setTotalHp(battle.enemyRatio(), battle.wave);
+  setTotalHp(battle.enemyRatio(), battle.wave, true); // 进页首次：瞬时定位，不演出缓动
   battle.start(onTick);
 
   // ⑦ 底部导航：button_nav_* 五枚（图标保留、文字清空由程序绘 label）
@@ -431,5 +459,8 @@ export function buildBattle(root: Node, gm: GameManager): void {
   });
 
   // 离开本页时停止计时器，避免泄漏
-  gm.cleanup = () => battle.stop();
+  gm.cleanup = () => {
+    if (hpTween) { hpTween.stop(); hpTween = null; } // 切页时停掉血条缓动，防止写已销毁节点
+    battle.stop();
+  };
 }
