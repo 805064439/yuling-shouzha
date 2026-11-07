@@ -809,6 +809,7 @@ export const UI3_NAMES = [
     'panel_status', 'panel_title_coral', 'panel_section_jade', 'panel_jade_large',
     'hp_total_bg', 'hp_total_deco', // R7 三层血条，预载防首屏空窗
     'button_wave',
+    'tab_side', // R13 F3：我方竖牌匾（64×147）；不在 UI3_BORDER → SIMPLE，漏预载会首屏空窗且不报错
     'chip_hp_red', 'chip_hp_gold', 'chip_hp_green',
     'bar_fill_red', 'bar_fill_gold', 'bar_fill_green',
     'bar_track_dark', // R6 新增中性空槽，预载防首屏空窗

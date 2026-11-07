@@ -287,7 +287,8 @@ export function buildBattle(root: Node, gm: GameManager): void {
 
   // ③ 波次徽章（button_wave，文字已清空由程序绘）
   const badge = makeUi3Sprite(root, 'button_wave', 220, 58);
-  badge.setPosition(230, 540, 0);
+  // R13 F2：540→566（+26），底边离开檐线带、与进度行靠 x 分离；x=230 不动
+  badge.setPosition(230, 566, 0);
   const waveLbl = makeLabel(badge, `第 ${startWave} 波`, { fontSize: 22, color: JADE.goldText });
   waveLbl.setPosition(0, 0, 1);
 
@@ -322,11 +323,18 @@ export function buildBattle(root: Node, gm: GameManager): void {
   hpEave.name = 'ui_bar_hp_eave';
   hpEave.setPosition(0, 25.5, 3); // 唯一真机可微调项（+18~+26）；若压标题只能下调
 
-  // 「敌方 · 梯队 · 蚀灵教」标题独立行（R1 验收 P1-3：删珊瑚粉横幅，文案并入此处；
-  // 不压条、不与右侧金色波次徽章重叠）
-  const hpLbl = makeLabel(root, `敌方 · ${tierLabel(startWave)} · 蚀灵教`, { fontSize: 17, color: '#FFF8E8' });
-  setSize(hpLbl, 420, 22);
-  hpLbl.setPosition(-110, 534, 0);
+  // R13 F1（解除 R1「不压条」旧约束）：标题叠在总血条图层之上、落进血条带内部，
+  // 名字与血槽合成一个组件；上檐金线留作血条上方的独立屋檐层（hpEave 620 / y=25.5 不动）。
+  // 挂 hpBg 且创建顺序在 deco / eave 之后 → 压在 bg / fill / deco / eave 之上。
+  const hpLbl = makeLabel(hpBg, `敌方 · ${tierLabel(startWave)} · 蚀灵教`,
+    { fontSize: 17, color: '#FFF8E8' }); // makeLabel 默认 align = 1 (CENTER)
+  setSize(hpLbl, 620, 22);                // 与 HPBG_W 齐宽
+  hpLbl.setPosition(0, 0, 0);             // 相对 hpBg 中心，绝对 y=495，血条带正中
+  const hl = hpLbl.getComponent('cc.Label') as any;
+  hl.overflow = 2;                        // SHRINK，长关卡名不溢出
+  hl.enableOutline = true;                // 亮 fill 上靠 1px 深描边勾轮廓
+  hl.outlineColor = hexToColor('#1E2A2E');
+  hl.outlineWidth = 1;
 
   // —— 敌方编队（蚀灵教）：每只怪一张金框卡 ——
   const enemyRow = new Node('enemyRow');
@@ -384,8 +392,20 @@ export function buildBattle(root: Node, gm: GameManager): void {
   const rowYs = singleRow ? [ALLY_TOP_SAFE - SLOT.h / 2] : ALLY_ROW_Y;
   const rowCounts = singleRow ? [count] : [perRow, count - perRow];
   const gapX = SLOT.w + 22;
-  // 小节标题「我方」：金色、与我方第一行垂直居中
-  makeLabel(root, '我方', { fontSize: 16, color: JADE.goldText }).setPosition(-330, rowYs[0], 0);
+  // R13 F3：小节标题换成竖向金色牌匾（仓库已有 ui3/tabs/tab_side.png 64×147 → 40×92 等比）。
+  // UI3_NAMES 已补 'tab_side' 预载；不在 UI3_BORDER → 显式 SIMPLE，上下金菱不裁。
+  // 二字竖排挂牌匾节点，删掉原横排纯文字 Label，避免「牌上叠横字」。
+  const sideTab = makeUi3Sprite(root, 'tab_side', 40, 92, 0 /* SIMPLE */);
+  sideTab.setPosition(-330, rowYs[0], 0);
+  ['我', '方'].forEach((ch, i) => {
+    const lab = makeLabel(sideTab, ch, { fontSize: 16, color: JADE.goldText });
+    setSize(lab, 40, 24);
+    lab.setPosition(0, i === 0 ? 18 : -18, 1);
+    const lc = lab.getComponent('cc.Label') as any;
+    lc.enableOutline = true;
+    lc.outlineColor = hexToColor('#1E2A2E');
+    lc.outlineWidth = 1;
+  });
 
   const allyPos = (idx: number): [number, number] => {
     const r = Math.min(Math.floor(idx / perRow), rowYs.length - 1);
