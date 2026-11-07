@@ -1,6 +1,7 @@
 // R9 程序侧回归（R8 美术评审后）：状态栏去胶囊 / 名牌下移 / 满血-残血两态金饰恒定 / fill 圆头。
-// 用法: node tools/verify_r9.mjs [url] [saveJson] [outPng]
+// 用法: node tools/verify_r9.mjs [url] [saveJson] [outPng] [unit]
 // 第3波存档 tools/save_rush.json 开局 fill≈68%（残血），第140波 tools/save140.json ≈99%（满血）。
+// 第5参数传 'unit' 时，截图触发条件改为「某单位血条 fillRange∈[0.25,0.70]」，用于验右端平切不退化。
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -138,10 +139,16 @@ async function main() {
     if (cur && cur.hpFills && cur.hpFills.length) {
       const live = cur.hpFills.filter((f) => f.active).map((f) => f.w);
       const ratio = live.length ? Math.max(...live) / 586 : 0;
-      if (!shotDone && ratio >= 0.40 && ratio <= 0.70) {
+      // 第5参数 = 'unit' 时改为抓「单位血条真实残血帧」（R9 清单第5条：右端平切不退化成锥形）
+      const unitMode = process.argv[5] === 'unit';
+      const alive = cur.unitFills ? cur.unitFills.filter((f) => f.active) : [];
+      const unitLow = alive.some((f) => f.fillRange >= 0.25 && f.fillRange <= 0.70);
+      const unitMin = alive.length ? Math.min(...alive.map((f) => f.fillRange)) : 0;
+      const hit = unitMode ? unitLow : (ratio >= 0.40 && ratio <= 0.70);
+      if (!shotDone && hit) {
         const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
         fs.writeFileSync(OUT, Buffer.from(shot.data, 'base64'));
-        shotDone = true; shotRatio = Number(ratio.toFixed(3));
+        shotDone = true; shotRatio = unitMode ? unitMin : Number(ratio.toFixed(3));
       }
     }
     await sleep(1100);
