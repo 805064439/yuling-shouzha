@@ -21,7 +21,13 @@
 //  · 敌方总血条由单层 panel_section_jade 拆成三层：hp_total_bg 墨绿底(0) →
 //    bar_fill_*(1) → hp_total_deco 金饰(2)；金饰独立节点、不随 fill 拉伸。
 //  · 高度常量 UNIT_FILL_H 21/21/19→14/14/13、track +4k→+10k、HP_FILL_H 22→16，
-//    让 fill 上下露出墨绿槽。四块状态栏数字胶囊按待确认项**暂保留**。
+//    让 fill 上下露出墨绿槽。
+// R8（美术评审 R7 接入复验）修正：
+//  · 决策同步：用户 14:44 已拍板「去掉四块状态栏数字胶囊」（金带根治后遮带功能消失），
+//    R7 按报告「待确认项」原文暂保留属漏接；本轮删除 resNumPlate 节点块，数字 Label 一字不改，
+//    直接落在干净墨绿底上（对比 ≈4.8:1），四枚深色方章继续保留。
+//  · P2 方案 A：名牌中心 -107*k→-110*k，track 底缘 -97*k 与名牌顶缘 -97*k 不再重叠，
+//    单位血条下槽恢复到 ≈5 设计px、上下对称。
 
 import { Node, UITransform, Graphics, Color, tween } from 'cc';
 import type { GameManager } from '../GameManager';
@@ -90,11 +96,12 @@ interface UnitBar {
  *    旧实现按 ratio 用 setSize 变宽，bar_fill_* 是 SLICED 左右 cap 各 10px，
  *    w<20 时两 cap 重叠退化成锥形端头（真机「墨傀使 76/668」）。
  *  · plate_name_{color} 名牌缎带：卡底舌位，怪名上移进名牌内（不再被卡框挡住）。
- * 240 高卡纵向布局（y 自上而下）：chip -62(28) → track/fill -85(21) → plate -107(26)=贴卡底。
+ * 240 高卡纵向布局（y 自上而下）：chip -62(28) → track/fill -85(24/14) → plate -110(26)=贴卡底。
  * z 序：track(0) < fill(1) < plate(2) < chip(3) < 死亡遮罩(4)。节点名保留 unitHp* 供端到端探针统计。
  */
 const UNIT_CHIP_H = 28;   // chip_hp_* 源高（red 132×28 / green 125×30 / gold 119×28）
 // R7：21/21/19 → 14/14/13，配合 track 加高让 fill 上下各露约 5px 墨绿槽（容器感）
+// R8：名牌 -107*k→-110*k 后下槽才真正露出 5px（原名牌顶缘 -94*k 把 track 底 -96*k 吃掉 2k）
 const UNIT_FILL_H: Record<'red' | 'gold' | 'green', number> = { red: 14, gold: 14, green: 13 };
 const UNIT_PLATE_H = 26;  // 名牌渲染高（源 32 压 0.81，竖 cap 20 ≤ 26 合法）
 
@@ -126,11 +133,11 @@ function makeUnitBar(
   track.setPosition(0, -85 * k, 0); // z=0：垫在 fill 下
   const fill = makeUi3Sprite(stage, `bar_fill_${color}`, innerW, fillH, 3 /* FILLED */);
   fill.name = 'unitHpFill';
-  fill.setPosition(0, -85 * k, 1); // z=1：顶藏入胶囊后、底藏入名牌后
+  fill.setPosition(0, -85 * k, 1); // z=1：顶藏入胶囊后；底缘 -92*k → 名牌顶缘 -97*k 留 ≈5k 下槽（R8）
   // ④ 名牌缎带（卡底舌位，底缘贴卡底；怪名移进名牌内）
   const plateW = Math.min(206 * k, cardW - 20);
   const plate = makeUi3Sprite(stage, `plate_name_${color}`, plateW, UNIT_PLATE_H * k);
-  plate.setPosition(0, -107 * k, 2);
+  plate.setPosition(0, -110 * k, 2); // R8 P2 方案A：-107→-110，下移 3k 让出下槽
   const nameLbl = makeLabel(plate, unitName, { fontSize: Math.max(13, Math.round(15 * k)), color: JADE.namePlate });
   setSize(nameLbl, plateW - 34, UNIT_PLATE_H * k - 8);
   nameLbl.setPosition(0, 0, 1);
@@ -206,8 +213,10 @@ export function buildBattle(root: Node, gm: GameManager): void {
   // 烘焙文字时用横向亮度 lerp 把金色数字摊成全宽色带留下的重建伪影；原始切片
   // s1_00 中间 x=500 列只有连续深墨绿渐变 + 上下各一条细金边。现 panel_status
   // 已从原始切片就地重抠（878×84 / alpha / .meta 不变），金带根治、覆盖即生效。
-  // 数字仍沿用 R5 方案 A 的 #F5DFA0 + 1px #1E2A2E 描边（3.8.2+ Label 原生描边）。
-  // 四块深墨绿胶囊属 R7 待确认项，金带消失后已非必需，但仍属用户确认过的设计，暂保留。
+  // 数字仍沿用 R5 方案 A 的 #F5DFA0 + 1px #1E2A2E 描边（3.8.2+ Label 原生描边），一字未改。
+  // R8：用户已拍板去掉四块深墨绿胶囊——唯一功能「遮中金带」随 panel_status 重抠消失，
+  // 留着反把干净底切碎；删后数字直接落在 (78,97,93) 墨绿底上，对比 ≈4.8:1。
+  // 四枚深色方章按用户确认继续保留。
   const status = makeUi3Sprite(root, 'panel_status', 729, 70);
   status.setPosition(0, 622, 0);
   const RES: Array<[string, () => string]> = [
@@ -220,14 +229,6 @@ export function buildBattle(root: Node, gm: GameManager): void {
   RES.forEach(([icon, get], i) => {
     const x = -116 + i * 124;
     makeUi3Sprite(status, icon, 28, 33).setPosition(x - 26, 0, 1);
-    // 数字底衬（独立 Graphics 节点，永不换 Sprite → 不踩「先 Graphics 后 Sprite 永不渲染」陷阱）；
-    // 树序 图标 < 胶囊 < 数字，胶囊遮住中金带且盖不住后一轮才添加的下一组图标。
-    const plate = newNode('resNumPlate', status);
-    plate.setPosition(x + 46, 0, 0);
-    const pg = plate.addComponent(Graphics);
-    pg.fillColor = new Color(30, 42, 46, 190); // #1E2A2E alpha 190
-    pg.roundRect(-46, -15, 92, 30, 8);
-    pg.fill();
     const num = makeLabel(status, get(), { fontSize: 18, color: '#F5DFA0', align: 0 });
     const nut = num.getComponent(UITransform) as any;
     nut.anchorX = 0; // 左对齐锚点：文字只向右生长
